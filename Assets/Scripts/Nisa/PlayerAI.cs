@@ -24,6 +24,7 @@ public class PlayerAI : MonoBehaviour
     public Item CurrentTarget => currentState == AIState.MovingToItem ? currentTarget : null;
     public bool IsCarrying => currentState == AIState.MovingToDeliveryPoint && currentTarget != null;
     public Vector3 StartPosition => startPoint != null ? startPoint.position : transform.position;
+    public Vector3 DeliveryPosition => deliveryPoint != null ? deliveryPoint.position : transform.position;
 
     private void Awake()
     {
@@ -193,6 +194,39 @@ public class PlayerAI : MonoBehaviour
         currentTarget.Drop(position);
         currentTarget = null;
         Replan();
+    }
+
+    /// <summary>Forces the chef to abandon his current target and walk toward the farthest ingredient on the map.</summary>
+    public bool TargetFarthestItem()
+    {
+        PathCreator map = PathCreator.Active;
+        if (IsCarrying || map == null || ItemManager.Instance == null) return false;
+
+        Vector3Int startCell = map.WorldToCell(transform.position);
+        Item farthestItem = null;
+        List<Vector3> farthestPath = null;
+        int longest = -1;
+
+        foreach (KeyValuePair<Item, Vector3> entry in ItemManager.Instance.ActiveItems)
+        {
+            if (entry.Key == null || entry.Key.IsCollected) continue;
+
+            List<Vector3> toItem = FindPath(map, startCell, map.WorldToCell(entry.Value));
+            if (toItem != null && toItem.Count > longest)
+            {
+                longest = toItem.Count;
+                farthestItem = entry.Key;
+                farthestPath = toItem;
+            }
+        }
+
+        if (farthestItem == null) return false;
+
+        currentTarget = farthestItem;
+        currentPath = farthestPath;
+        currentWaypoint = 0;
+        currentState = AIState.MovingToItem;
+        return true;
     }
 
     private void Replan()

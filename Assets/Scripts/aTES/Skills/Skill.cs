@@ -42,6 +42,8 @@ namespace aTES
             return true;
         }
 
+        public void ResetCooldown() => readyTime = 0f;
+
         /// <summary>Do the effect. Return false if it could not be used (nothing happens, no cooldown).</summary>
         protected abstract bool Activate(SkillManager m);
 
