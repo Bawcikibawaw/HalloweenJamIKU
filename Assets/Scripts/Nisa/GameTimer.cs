@@ -100,6 +100,7 @@ public class GameTimer : MonoBehaviour
     public void WinLevel()
     {
         isRunning = false;
+        SkillManager.Instance?.ResetCooldowns();
         ShowWarning("LEVEL WON!");
 
         if (levelWonPanel != null)
@@ -116,6 +117,7 @@ public class GameTimer : MonoBehaviour
     public void FailLevel()
     {
         isRunning = false;
+        SkillManager.Instance?.ResetCooldowns();
         ShowWarning("LEVEL FAILED!");
 
         if (levelFailedPanel != null)

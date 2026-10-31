@@ -7,15 +7,21 @@ public class PlayerStats : MonoBehaviour
     [SerializeField] [Range(0.1f, 2f)] private float carrySpeedMultiplier = 0.85f;
     [SerializeField] private float pickupDelay = 0.15f;
 
+    private float initialBaseSpeed;
     private float speedMultiplier = 1f;
+    private float carryDebuffMultiplier = 1f;
     private float slowTimer;
+    private float carrySlowTimer;
     private float stunTimer;
 
     public bool IsStunned => stunTimer > 0f;
+    public float BaseMoveSpeed => baseMoveSpeed;
     public float PickupDelay => pickupDelay;
     public float CurrentSpeed => IsStunned ? 0f : baseMoveSpeed * speedMultiplier;
 
-    public float GetMoveSpeed(bool isCarrying) => CurrentSpeed * (isCarrying ? carrySpeedMultiplier : 1f);
+    private void Awake() => initialBaseSpeed = baseMoveSpeed;
+
+    public float GetMoveSpeed(bool isCarrying) => CurrentSpeed * (isCarrying ? carrySpeedMultiplier * carryDebuffMultiplier : 1f);
 
     private void Update()
     {
@@ -24,12 +30,21 @@ public class PlayerStats : MonoBehaviour
 
         if (slowTimer > 0f && (slowTimer -= Time.deltaTime) <= 0f)
             speedMultiplier = 1f;
+
+        if (carrySlowTimer > 0f && (carrySlowTimer -= Time.deltaTime) <= 0f)
+            carryDebuffMultiplier = 1f;
     }
 
     public void ApplySlow(float multiplier, float duration)
     {
         speedMultiplier = Mathf.Clamp(multiplier, 0.05f, 1f);
         slowTimer = Mathf.Max(slowTimer, duration);
+    }
+
+    public void ApplyCarrySlow(float multiplier, float duration)
+    {
+        carryDebuffMultiplier = Mathf.Clamp(multiplier, 0.05f, 1f);
+        carrySlowTimer = Mathf.Max(carrySlowTimer, duration);
     }
 
     public void ApplyStun(float duration)
@@ -45,8 +60,11 @@ public class PlayerStats : MonoBehaviour
     [ContextMenu("Test: Clear Debuffs")]
     public void ClearDebuffs()
     {
+        if (initialBaseSpeed > 0f) baseMoveSpeed = initialBaseSpeed;
         speedMultiplier = 1f;
+        carryDebuffMultiplier = 1f;
         slowTimer = 0f;
+        carrySlowTimer = 0f;
         stunTimer = 0f;
     }
 

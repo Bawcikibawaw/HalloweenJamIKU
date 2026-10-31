@@ -25,6 +25,8 @@ namespace aTES
         public ItemManager Items => ItemManager.Instance;
         public PathCreator Map => PathCreator.Active;
 
+        private LevelManager levelManager;
+
         public event Action OnEquippedChanged;
         public event Action<Skill> OnSkillUsed;
 
@@ -43,11 +45,26 @@ namespace aTES
             Player = FindFirstObjectByType<PlayerAI>();
             Stats = Player != null ? Player.GetComponent<PlayerStats>() : null;
             Timer = FindFirstObjectByType<GameTimer>();
+            levelManager = FindFirstObjectByType<LevelManager>();
+
+            if (levelManager != null)
+                levelManager.OnLevelChanged += HandleLevelChanged;
         }
 
         private void OnDestroy()
         {
+            if (levelManager != null)
+                levelManager.OnLevelChanged -= HandleLevelChanged;
+
             if (Instance == this) Instance = null;
+        }
+
+        private void HandleLevelChanged(int _) => ResetCooldowns();
+
+        public void ResetCooldowns()
+        {
+            if (AllSkills == null) return;
+            foreach (Skill s in AllSkills) s.ResetCooldown();
         }
 
         private void Update()
