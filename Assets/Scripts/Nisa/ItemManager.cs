@@ -14,22 +14,17 @@ public class ItemManager : MonoBehaviour
 {
     public static ItemManager Instance { get; private set; }
 
-    [Header("References")]
-    [SerializeField] private LevelManager levelManager;
-    [SerializeField] private Transform playerStartPoint;
-    [SerializeField] private Transform deliveryPoint;
-
-    [Header("Spawn Settings")]
     [SerializeField] private List<ItemSpawnEntry> spawnEntries = new();
 
     private readonly Dictionary<Item, Vector3> activeItems = new();
+    private LevelManager levelManager;
+    private Transform playerStartPoint;
+    private Transform deliveryPoint;
 
     public IReadOnlyDictionary<Item, Vector3> ActiveItems => activeItems;
 
     public event Action OnItemsChanged;
     public event Action<Item, Vector3> OnItemPositionChanged;
-
-    private PathCreator pathCreator;
 
     private void Awake()
     {
@@ -38,28 +33,17 @@ public class ItemManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
         Instance = this;
     }
 
     private void Start()
     {
-        if (levelManager == null)
-            levelManager = FindFirstObjectByType<LevelManager>();
+        levelManager = FindFirstObjectByType<LevelManager>();
+        playerStartPoint = GameObject.Find("PlayerStartPoint")?.transform ?? GameObject.Find("Player")?.transform;
+        deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
 
-        if (playerStartPoint == null)
-            playerStartPoint = GameObject.Find("PlayerStartPoint")?.transform;
-
-        if (deliveryPoint == null)
-            deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
-
-        if (levelManager == null)
-        {
-            Debug.LogError("ItemManager: LevelManager reference is missing.", this);
-            return;
-        }
-
-        levelManager.OnLevelChanged += HandleLevelChanged;
+        if (levelManager != null)
+            levelManager.OnLevelChanged += HandleLevelChanged;
 
         SpawnLevelItems();
     }
@@ -73,7 +57,7 @@ public class ItemManager : MonoBehaviour
             Instance = null;
     }
 
-    private void HandleLevelChanged(int levelIndex)
+    private void HandleLevelChanged(int _)
     {
         ClearItems();
         SpawnLevelItems();
@@ -81,149 +65,72 @@ public class ItemManager : MonoBehaviour
 
     public void SpawnLevelItems()
     {
-        pathCreator = PathCreator.Active;
+        PathCreator map = PathCreator.Active;
+        if (map == null || playerStartPoint == null) return;
 
-        if (pathCreator == null)
+        List<Vector3Int> cells = GetReachableCells(map);
+        for (int i = cells.Count - 1; i > 0; i--)
         {
-            Debug.LogError("ItemManager: Active PathCreator not found.", this);
-            return;
+            int j = UnityEngine.Random.Range(0, i + 1);
+            (cells[i], cells[j]) = (cells[j], cells[i]);
         }
 
-        List<Vector3Int> availableCells = GetAvailableCells();
-        ShuffleCells(availableCells);
-
-        int cellIndex = 0;
-
+        int index = 0;
         foreach (ItemSpawnEntry entry in spawnEntries)
         {
-            if (entry.itemData == null || entry.itemData.itemPrefab == null)
-            {
-                Debug.LogWarning("ItemManager: Invalid ItemData or prefab.", this);
-                continue;
-            }
+            if (entry.itemData == null || entry.itemData.itemPrefab == null) continue;
 
-            for (int i = 0; i < entry.amount; i++)
+            for (int i = 0; i < entry.amount && index < cells.Count; i++, index++)
             {
-                if (cellIndex >= availableCells.Count)
+                Vector3 pos = map.Cells[cells[index]].center;
+                GameObject obj = Instantiate(entry.itemData.itemPrefab, pos, Quaternion.identity, map.transform);
+                if (!obj.TryGetComponent(out Item item))
                 {
-                    Debug.LogWarning("ItemManager: Not enough available grid cells.", this);
-                    OnItemsChanged?.Invoke();
-                    return;
+                    Destroy(obj);
+                    continue;
                 }
 
-                Vector3Int cell = availableCells[cellIndex];
-                GridCell gridCell = pathCreator.Cells[cell];
+                item.Initialize(entry.itemData);
+                if (entry.itemData.itemSprite != null && obj.TryGetComponent(out SpriteRenderer sr))
+                    sr.sprite = entry.itemData.itemSprite;
 
-                SpawnItem(entry.itemData, gridCell.center, pathCreator.transform);
-                cellIndex++;
+                activeItems[item] = pos;
             }
         }
 
         OnItemsChanged?.Invoke();
     }
 
-    private List<Vector3Int> GetAvailableCells()
+    private List<Vector3Int> GetReachableCells(PathCreator map)
     {
-        List<Vector3Int> availableCells = new();
+        Vector3Int startCell = map.WorldToCell(playerStartPoint.position);
+        Vector3Int deliveryCell = deliveryPoint != null ? map.WorldToCell(deliveryPoint.position) : startCell;
+        List<Vector3Int> result = new();
 
-        if (playerStartPoint == null)
-        {
-            Debug.LogWarning("ItemManager: Player start point is missing.");
-            return availableCells;
-        }
-
-        Vector3Int startCell = pathCreator.WorldToCell(playerStartPoint.position);
-
-        if (!pathCreator.IsWalkable(startCell))
-        {
-            Debug.LogError("ItemManager: Player start cell is not walkable.");
-            return availableCells;
-        }
-
-        Vector3Int deliveryCell = deliveryPoint != null
-            ? pathCreator.WorldToCell(deliveryPoint.position)
-            : default;
-
-        Vector3Int[] directions =
-        {
-            Vector3Int.up,
-            Vector3Int.down,
-            Vector3Int.left,
-            Vector3Int.right
-        };
+        if (!map.IsWalkable(startCell)) return result;
 
         Queue<Vector3Int> queue = new();
-        HashSet<Vector3Int> visited = new();
-
+        HashSet<Vector3Int> visited = new() { startCell };
         queue.Enqueue(startCell);
-        visited.Add(startCell);
 
         while (queue.Count > 0)
         {
             Vector3Int current = queue.Dequeue();
-
-            foreach (Vector3Int direction in directions)
+            foreach (Vector3Int dir in Sides.Dir)
             {
-                Vector3Int neighbor = current + direction;
-
-                if (visited.Contains(neighbor))
-                    continue;
-
-                if (!pathCreator.CanMove(current, neighbor))
-                    continue;
-
-                visited.Add(neighbor);
-                queue.Enqueue(neighbor);
+                Vector3Int next = current + dir;
+                if (map.CanMove(current, next) && visited.Add(next))
+                    queue.Enqueue(next);
             }
         }
 
         foreach (Vector3Int cell in visited)
         {
-            if (cell == startCell || cell == deliveryCell)
-                continue;
-
-            availableCells.Add(cell);
+            if (cell != startCell && cell != deliveryCell)
+                result.Add(cell);
         }
 
-        return availableCells;
-    }
-
-    private void ShuffleCells(List<Vector3Int> cells)
-    {
-        for (int i = cells.Count - 1; i > 0; i--)
-        {
-            int randomIndex = UnityEngine.Random.Range(0, i + 1);
-            (cells[i], cells[randomIndex]) = (cells[randomIndex], cells[i]);
-        }
-    }
-
-    private void SpawnItem(ItemData data, Vector3 position, Transform parent)
-    {
-        GameObject itemObject = Instantiate(
-            data.itemPrefab,
-            position,
-            Quaternion.identity,
-            parent
-        );
-
-        Item item = itemObject.GetComponent<Item>();
-
-        if (item == null)
-        {
-            Debug.LogError("Item prefab is missing Item component.", itemObject);
-            Destroy(itemObject);
-            return;
-        }
-
-        item.Initialize(data);
-
-        if (data.itemSprite != null &&
-            itemObject.TryGetComponent<SpriteRenderer>(out SpriteRenderer spriteRenderer))
-        {
-            spriteRenderer.sprite = data.itemSprite;
-        }
-
-        activeItems.Add(item, position);
+        return result;
     }
 
     public void UnregisterItem(Item item)
@@ -234,31 +141,20 @@ public class ItemManager : MonoBehaviour
 
     public bool TryMoveItem(Item item, Vector3Int targetCell)
     {
-        if (item == null || item.IsCollected || pathCreator == null)
+        PathCreator map = PathCreator.Active;
+        if (item == null || item.IsCollected || map == null || !activeItems.ContainsKey(item) || !GetReachableCells(map).Contains(targetCell))
             return false;
 
-        if (!activeItems.ContainsKey(item))
-            return false;
-
-        if (!pathCreator.IsWalkable(targetCell))
-            return false;
-
-        foreach (KeyValuePair<Item, Vector3> entry in activeItems)
+        foreach (KeyValuePair<Item, Vector3> kv in activeItems)
         {
-            if (entry.Key == item)
-                continue;
-
-            if (pathCreator.WorldToCell(entry.Value) == targetCell)
+            if (kv.Key != item && map.WorldToCell(kv.Value) == targetCell)
                 return false;
         }
 
-        Vector3 newPosition = pathCreator.CellToWorldCenter(targetCell);
-
-        item.transform.position = newPosition;
-        activeItems[item] = newPosition;
-
-        OnItemPositionChanged?.Invoke(item, newPosition);
-
+        Vector3 newPos = map.CellToWorldCenter(targetCell);
+        item.transform.position = newPos;
+        activeItems[item] = newPos;
+        OnItemPositionChanged?.Invoke(item, newPos);
         return true;
     }
 
@@ -266,10 +162,8 @@ public class ItemManager : MonoBehaviour
     {
         foreach (Item item in activeItems.Keys)
         {
-            if (item != null)
-                Destroy(item.gameObject);
+            if (item != null) Destroy(item.gameObject);
         }
-
         activeItems.Clear();
         OnItemsChanged?.Invoke();
     }

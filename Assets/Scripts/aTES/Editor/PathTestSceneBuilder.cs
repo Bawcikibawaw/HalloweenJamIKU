@@ -33,17 +33,17 @@ namespace aTES.EditorTools
             "................",
             "..1DDDDDDDDDD2..",
             "..R..........L..",
-            "..R..1DDDD2..L..",
-            "..R..R....L..L..",
-            "..3UU4....3UU4..",
-            "................",
-            "..1DDDD2..1DD2..",
-            "..R....L..R..L..",
-            "..R....L..R..L..",
-            "..R.......R..L..",
-            "..3UUUUUUU4..L..",
+            "..R..1DDDD...L..",
+            "..R..R.......L..",
+            "..R..3UUUUUUU4..",
+            "..R.............",
+            "..R..1DDDDDDD2..",
+            "..R..R.......L..",
+            "..R..3UUUU...L..",
+            "..R..........L..",
+            "..3UUUUUUU...L..",
             ".............L..",
-            "..UUUUUUUUUUU4..",
+            "...UUUUUUUUUU4..",
             "................",
         };
 
@@ -51,19 +51,19 @@ namespace aTES.EditorTools
         {
             "................",
             "................",
-            "..1DDDD2.1DDD2..",
-            "..R....L.R...L..",
-            "..R....L.....L..",
-            "..3UU2.3UUUUU4..",
-            ".....L..........",
-            "..1DD4...1DDD2..",
-            "..R......R...L..",
-            "..R..R...R...L..",
-            "..R..R.......L..",
-            "..R..3UUUUUUU4..",
-            "..R.............",
-            "..3UUUUUUUUUU2..",
+            "..1DDDD2..1DD2..",
+            "..R....L..R..L..",
+            "..R....L..R..L..",
+            "..3U..U4..3U.L..",
             ".............L..",
+            "..1DDDDDDDD..L..",
+            "..R..........L..",
+            "..R..1DDDD2..L..",
+            "..R..R....L..L..",
+            "..R..3U..U4..L..",
+            "..R..........L..",
+            "..3UUUUUU....L..",
+            "........UUUUU4..",
             "................",
         };
 
@@ -103,8 +103,8 @@ namespace aTES.EditorTools
                 ['R'] = LoadTile("duvarlar jem_3_3"),
                 ['1'] = LoadTile("duvarlar jem_3_2"),
                 ['2'] = LoadTile("duvarlar jem_12_2"),
-                ['3'] = LoadTile("duvarlar jem_5_4"),
-                ['4'] = LoadTile("duvarlar jem_10_4"),
+                ['3'] = LoadTile("duvarlar jem_3_6"),
+                ['4'] = LoadTile("duvarlar jem_10_6"),
             };
 
             BuildCustomLevel(levelsRoot.transform, "Level 2", outer, Level2Walls, innerTiles);
@@ -141,23 +141,16 @@ namespace aTES.EditorTools
             GameObjectUtility.RemoveMonoBehavioursWithMissingScript(player);
             player.transform.position = startWorld;
 
-            Transform handPoint = player.transform.Find("HandPoint");
-            if (handPoint == null)
+            if (player.transform.Find("HandPoint") == null)
             {
                 GameObject hp = new GameObject("HandPoint");
                 hp.transform.SetParent(player.transform, false);
                 hp.transform.localPosition = new Vector3(0.4f, 0.3f, 0f);
-                handPoint = hp.transform;
             }
 
             if (!player.TryGetComponent(out PlayerMoveRays _)) player.AddComponent<PlayerMoveRays>();
-            if (!player.TryGetComponent(out PlayerAI playerAI)) playerAI = player.AddComponent<PlayerAI>();
-
-            SerializedObject aiSO = new SerializedObject(playerAI);
-            aiSO.FindProperty("handPoint").objectReferenceValue = handPoint;
-            aiSO.FindProperty("deliveryPoint").objectReferenceValue = deliveryPointObj.transform;
-            aiSO.FindProperty("moveSpeed").floatValue = 4f;
-            aiSO.ApplyModifiedPropertiesWithoutUndo();
+            if (!player.TryGetComponent(out PlayerStats _)) player.AddComponent<PlayerStats>();
+            if (!player.TryGetComponent(out PlayerAI _)) player.AddComponent<PlayerAI>();
 
             // 4. Item Prefab + ItemData + ItemManager
             ItemData itemData = CreateItemAssets(baseSprite);
@@ -165,9 +158,6 @@ namespace aTES.EditorTools
             ItemManager itemManager = itemManagerObj.AddComponent<ItemManager>();
 
             SerializedObject imSO = new SerializedObject(itemManager);
-            imSO.FindProperty("levelManager").objectReferenceValue = levelManager;
-            imSO.FindProperty("playerStartPoint").objectReferenceValue = startPointObj.transform;
-            imSO.FindProperty("deliveryPoint").objectReferenceValue = deliveryPointObj.transform;
             SerializedProperty entries = imSO.FindProperty("spawnEntries");
             entries.ClearArray();
             entries.InsertArrayElementAtIndex(0);
@@ -228,16 +218,10 @@ namespace aTES.EditorTools
             canvasObj.AddComponent<CanvasScaler>();
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            TextMeshProUGUI timerTMP = CreateTMP(canvasObj.transform, "TimerText", new Vector2(0f, -30f), 32, Color.white);
-            TextMeshProUGUI warningTMP = CreateTMP(canvasObj.transform, "WarningText", new Vector2(0f, -70f), 24, new Color(1f, 0.4f, 0.2f));
+            CreateTMP(canvasObj.transform, "TimerText", new Vector2(0f, -30f), 32, Color.white);
+            CreateTMP(canvasObj.transform, "WarningText", new Vector2(0f, -70f), 24, new Color(1f, 0.4f, 0.2f));
 
-            GameObject timerObj = new GameObject("GameTimer");
-            GameTimer gameTimer = timerObj.AddComponent<GameTimer>();
-            SerializedObject gtSO = new SerializedObject(gameTimer);
-            gtSO.FindProperty("timerText").objectReferenceValue = timerTMP;
-            gtSO.FindProperty("warningText").objectReferenceValue = warningTMP;
-            gtSO.FindProperty("levelDuration").floatValue = 120f;
-            gtSO.ApplyModifiedPropertiesWithoutUndo();
+            new GameObject("GameTimer").AddComponent<GameTimer>();
         }
 
         private static TextMeshProUGUI CreateTMP(Transform parent, string name, Vector2 anchoredPos, float fontSize, Color color)

@@ -2,63 +2,41 @@ using System.Collections.Generic;
 using UnityEngine;
 using aTES;
 
+[RequireComponent(typeof(PlayerStats))]
 public class PlayerAI : MonoBehaviour
 {
-    private enum AIState
-    {
-        FindingItem,
-        MovingToItem,
-        MovingToDeliveryPoint,
-        Finished
-    }
+    private enum AIState { FindingItem, MovingToItem, MovingToDeliveryPoint, Finished }
 
-    [Header("References")]
-    [SerializeField] private Transform handPoint;
-    [SerializeField] private Transform deliveryPoint;
-
-    [Header("Movement")]
-    [SerializeField] private float moveSpeed = 4f;
     [SerializeField] private float arrivalDistance = 0.05f;
 
     private AIState currentState = AIState.FindingItem;
-
-    private PathCreator pathCreator;
+    private PlayerStats stats;
     private LevelManager levelManager;
+    private Transform handPoint;
+    private Transform deliveryPoint;
     private Transform startPoint;
     private Item currentTarget;
 
     private List<Vector3> currentPath = new();
     private int currentWaypoint;
 
+    private void Awake()
+    {
+        stats = GetComponent<PlayerStats>();
+        handPoint = transform.Find("HandPoint") ?? transform;
+    }
+
     private void Start()
     {
-        pathCreator = PathCreator.Active;
-
-        if (handPoint == null)
-            handPoint = transform.Find("HandPoint");
-
-        if (deliveryPoint == null)
-            deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
-
+        deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
         startPoint = GameObject.Find("PlayerStartPoint")?.transform;
         levelManager = FindFirstObjectByType<LevelManager>();
 
-        if (handPoint == null || deliveryPoint == null)
+        if (ItemManager.Instance != null)
         {
-            Debug.LogError("PlayerAI: Hand Point or Delivery Point is missing.", this);
-            enabled = false;
-            return;
+            ItemManager.Instance.OnItemPositionChanged += HandleItemPositionChanged;
+            ItemManager.Instance.OnItemsChanged += HandleItemsChanged;
         }
-
-        if (ItemManager.Instance == null)
-        {
-            Debug.LogError("PlayerAI: ItemManager instance not found.", this);
-            enabled = false;
-            return;
-        }
-
-        ItemManager.Instance.OnItemPositionChanged += HandleItemPositionChanged;
-        ItemManager.Instance.OnItemsChanged += HandleItemsChanged;
 
         if (levelManager != null)
             levelManager.OnLevelChanged += HandleLevelChanged;
@@ -81,22 +59,16 @@ public class PlayerAI : MonoBehaviour
     private void HandleItemsChanged()
     {
         if (currentState == AIState.Finished && ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count > 0)
-        {
             currentState = AIState.FindingItem;
-        }
     }
 
-    private void HandleLevelChanged(int levelIndex)
+    private void HandleLevelChanged(int _)
     {
-        if (currentTarget != null)
-        {
-            Destroy(currentTarget.gameObject);
-            currentTarget = null;
-        }
+        if (currentTarget != null) Destroy(currentTarget.gameObject);
+        if (startPoint != null) transform.position = startPoint.position;
 
-        if (startPoint != null)
-            transform.position = startPoint.position;
-
+        currentTarget = null;
+        stats.ClearDebuffs();
         currentPath.Clear();
         currentWaypoint = 0;
         currentState = AIState.FindingItem;
@@ -104,86 +76,50 @@ public class PlayerAI : MonoBehaviour
 
     private void Update()
     {
+        if (stats.IsStunned) return;
+
         switch (currentState)
         {
-            case AIState.FindingItem:
-                FindNextItem();
-                break;
-
-            case AIState.MovingToItem:
-                MoveToItem();
-                break;
-
-            case AIState.MovingToDeliveryPoint:
-                MoveToDeliveryPoint();
-                break;
-
-            case AIState.Finished:
-                break;
+            case AIState.FindingItem: FindNextItem(); break;
+            case AIState.MovingToItem: MoveToItem(); break;
+            case AIState.MovingToDeliveryPoint: MoveToDeliveryPoint(); break;
         }
     }
 
-    // Finds the best reachable item.
     private void FindNextItem()
     {
-        pathCreator = PathCreator.Active;
+        PathCreator map = PathCreator.Active;
+        if (map == null || ItemManager.Instance == null || deliveryPoint == null) return;
 
-        if (pathCreator == null || ItemManager.Instance == null)
-            return;
-
-        Vector3Int startCell = pathCreator.WorldToCell(transform.position);
-        Vector3Int deliveryCell = pathCreator.WorldToCell(deliveryPoint.position);
+        Vector3Int startCell = map.WorldToCell(transform.position);
+        Vector3Int deliveryCell = map.WorldToCell(deliveryPoint.position);
 
         Item bestItem = null;
         List<Vector3> bestPath = null;
-        int shortestTotalPath = int.MaxValue;
+        int shortest = int.MaxValue;
 
-        foreach (var entry in ItemManager.Instance.ActiveItems)
+        foreach (KeyValuePair<Item, Vector3> entry in ItemManager.Instance.ActiveItems)
         {
-            Item item = entry.Key;
-            Vector3 itemPosition = entry.Value;
+            if (entry.Key == null || entry.Key.IsCollected) continue;
 
-            if (item == null || item.IsCollected)
-                continue;
+            Vector3Int itemCell = map.WorldToCell(entry.Value);
+            List<Vector3> toItem = FindPath(map, startCell, itemCell);
+            List<Vector3> toDelivery = toItem != null ? FindPath(map, itemCell, deliveryCell) : null;
 
-            Vector3Int itemCell = pathCreator.WorldToCell(itemPosition);
-
-            List<Vector3> pathToItem = FindPath(startCell, itemCell);
-
-            if (pathToItem == null)
-                continue;
-
-            List<Vector3> pathToDelivery = FindPath(itemCell, deliveryCell);
-
-            if (pathToDelivery == null)
-                continue;
-
-            int totalPathLength = pathToItem.Count + pathToDelivery.Count;
-
-            if (totalPathLength < shortestTotalPath)
+            if (toDelivery != null && toItem.Count + toDelivery.Count < shortest)
             {
-                shortestTotalPath = totalPathLength;
-                bestItem = item;
-                bestPath = pathToItem;
+                shortest = toItem.Count + toDelivery.Count;
+                bestItem = entry.Key;
+                bestPath = toItem;
             }
         }
 
-        if (bestItem == null)
-        {
-            currentState = AIState.Finished;
-            currentTarget = null;
-            currentPath.Clear();
-            return;
-        }
-
         currentTarget = bestItem;
-        currentPath = bestPath;
+        currentPath = bestPath ?? new List<Vector3>();
         currentWaypoint = 0;
-
-        currentState = AIState.MovingToItem;
+        currentState = bestItem != null ? AIState.MovingToItem : AIState.Finished;
     }
 
-    // Moves the AI towards the selected item.
     private void MoveToItem()
     {
         if (currentTarget == null)
@@ -192,203 +128,118 @@ public class PlayerAI : MonoBehaviour
             return;
         }
 
-        if (MoveAlongPath())
-        {
-            currentTarget.PickUp(handPoint);
+        if (!MoveAlongPath()) return;
 
-            currentPath = FindPath(
-                pathCreator.WorldToCell(transform.position),
-                pathCreator.WorldToCell(deliveryPoint.position)
-            );
-
-            if (currentPath == null)
-            {
-                Debug.LogError("PlayerAI: No path to delivery point.", this);
-                currentState = AIState.Finished;
-                return;
-            }
-
-            currentWaypoint = 0;
-            currentState = AIState.MovingToDeliveryPoint;
-        }
+        PathCreator map = PathCreator.Active;
+        currentTarget.PickUp(handPoint);
+        currentPath = FindPath(map, map.WorldToCell(transform.position), map.WorldToCell(deliveryPoint.position)) ?? new List<Vector3>();
+        currentWaypoint = 0;
+        currentState = AIState.MovingToDeliveryPoint;
     }
 
-    // Moves the AI towards the delivery point.
     private void MoveToDeliveryPoint()
     {
-        if (MoveAlongPath())
+        if (!MoveAlongPath()) return;
+
+        currentTarget.Deliver();
+        currentTarget = null;
+        currentPath.Clear();
+        currentWaypoint = 0;
+
+        if (ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count == 0 && levelManager != null)
         {
-            currentTarget.Deliver();
-            currentTarget = null;
-
-            currentPath.Clear();
-            currentWaypoint = 0;
-
-            if (ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count == 0 && levelManager != null)
-            {
-                levelManager.Next();
-                return;
-            }
-
-            currentState = AIState.FindingItem;
+            levelManager.Next();
+            return;
         }
+
+        currentState = AIState.FindingItem;
     }
 
-    // Moves towards the next waypoint.
     private bool MoveAlongPath()
     {
-        if (currentWaypoint >= currentPath.Count)
-            return true;
+        if (currentWaypoint >= currentPath.Count) return true;
 
-        Vector3 targetPosition = currentPath[currentWaypoint];
+        Vector3 target = currentPath[currentWaypoint];
+        float speed = stats.GetMoveSpeed(currentState == AIState.MovingToDeliveryPoint);
+        transform.position = Vector3.MoveTowards(transform.position, target, speed * Time.deltaTime);
 
-        transform.position = Vector3.MoveTowards(
-            transform.position,
-            targetPosition,
-            moveSpeed * Time.deltaTime
-        );
-
-        if (Vector3.Distance(transform.position, targetPosition) <= arrivalDistance)
+        if (Vector3.Distance(transform.position, target) <= arrivalDistance)
         {
-            transform.position = targetPosition;
+            transform.position = target;
             currentWaypoint++;
         }
 
         return currentWaypoint >= currentPath.Count;
     }
 
-    // Recalculates the route if the current target is moved.
-    private void HandleItemPositionChanged(Item item, Vector3 newPosition)
+    private void HandleItemPositionChanged(Item item, Vector3 newPos)
     {
-        if (currentState != AIState.MovingToItem || item != currentTarget)
-            return;
+        if (currentState != AIState.MovingToItem || item != currentTarget || PathCreator.Active == null) return;
 
-        pathCreator = PathCreator.Active;
-
-        if (pathCreator == null)
-            return;
-
-        Vector3Int startCell = pathCreator.WorldToCell(transform.position);
-        Vector3Int targetCell = pathCreator.WorldToCell(newPosition);
-
-        List<Vector3> newPath = FindPath(startCell, targetCell);
+        PathCreator map = PathCreator.Active;
+        List<Vector3> newPath = FindPath(map, map.WorldToCell(transform.position), map.WorldToCell(newPos));
+        currentPath = newPath ?? new List<Vector3>();
+        currentWaypoint = 0;
 
         if (newPath == null)
         {
             currentTarget = null;
-            currentPath.Clear();
             currentState = AIState.FindingItem;
-            return;
         }
-
-        currentPath = newPath;
-        currentWaypoint = 0;
     }
 
-    // A* pathfinding algorithm.
-    private List<Vector3> FindPath(Vector3Int start, Vector3Int target)
+    private static List<Vector3> FindPath(PathCreator map, Vector3Int start, Vector3Int target)
     {
-        if (pathCreator == null)
-            return null;
+        if (map == null || !map.IsWalkable(start) || !map.IsWalkable(target)) return null;
+        if (start == target) return new List<Vector3>();
 
-        if (!pathCreator.IsWalkable(start) || !pathCreator.IsWalkable(target))
-            return null;
-
-        if (start == target)
-            return new List<Vector3>();
-
-        List<Vector3Int> openSet = new();
-        HashSet<Vector3Int> closedSet = new();
-
+        List<Vector3Int> open = new() { start };
+        HashSet<Vector3Int> closed = new();
         Dictionary<Vector3Int, Vector3Int> cameFrom = new();
-        Dictionary<Vector3Int, int> gCost = new();
+        Dictionary<Vector3Int, int> gCost = new() { [start] = 0 };
 
-        openSet.Add(start);
-        gCost[start] = 0;
-
-        Vector3Int[] directions =
+        while (open.Count > 0)
         {
-            Vector3Int.up,
-            Vector3Int.down,
-            Vector3Int.left,
-            Vector3Int.right
-        };
-
-        while (openSet.Count > 0)
-        {
-            Vector3Int current = openSet[0];
-
-            foreach (Vector3Int cell in openSet)
+            Vector3Int current = open[0];
+            for (int i = 1; i < open.Count; i++)
             {
-                int currentFCost = gCost[current] + GetHeuristic(current, target);
-                int cellFCost = gCost[cell] + GetHeuristic(cell, target);
-
-                if (cellFCost < currentFCost)
-                    current = cell;
+                if (F(open[i]) < F(current)) current = open[i];
             }
 
             if (current == target)
-                return ReconstructPath(cameFrom, current);
-
-            openSet.Remove(current);
-            closedSet.Add(current);
-
-            foreach (Vector3Int direction in directions)
             {
-                Vector3Int neighbor = current + direction;
+                List<Vector3> path = new();
+                for (Vector3Int c = current; cameFrom.TryGetValue(c, out Vector3Int prev); c = prev)
+                    path.Add(map.CellToWorldCenter(c));
+                path.Reverse();
+                return path;
+            }
 
-                if (closedSet.Contains(neighbor))
-                    continue;
+            open.Remove(current);
+            closed.Add(current);
 
-                if (!pathCreator.CanMove(current, neighbor))
-                    continue;
+            foreach (Vector3Int dir in Sides.Dir)
+            {
+                Vector3Int next = current + dir;
+                if (closed.Contains(next) || !map.CanMove(current, next)) continue;
 
-                int tentativeGCost = gCost[current] + 1;
-
-                if (!gCost.ContainsKey(neighbor) ||
-                    tentativeGCost < gCost[neighbor])
+                int tentativeG = gCost[current] + 1;
+                if (!gCost.TryGetValue(next, out int oldG) || tentativeG < oldG)
                 {
-                    cameFrom[neighbor] = current;
-                    gCost[neighbor] = tentativeGCost;
-
-                    if (!openSet.Contains(neighbor))
-                        openSet.Add(neighbor);
+                    cameFrom[next] = current;
+                    gCost[next] = tentativeG;
+                    if (!open.Contains(next)) open.Add(next);
                 }
             }
         }
 
         return null;
-    }
 
-    // Reconstructs the path from the destination back to the start.
-    private List<Vector3> ReconstructPath(
-        Dictionary<Vector3Int, Vector3Int> cameFrom,
-        Vector3Int current)
-    {
-        List<Vector3> path = new();
-
-        while (cameFrom.ContainsKey(current))
-        {
-            path.Add(pathCreator.CellToWorldCenter(current));
-            current = cameFrom[current];
-        }
-
-        path.Reverse();
-
-        return path;
-    }
-
-    // Manhattan distance heuristic.
-    private int GetHeuristic(Vector3Int a, Vector3Int b)
-    {
-        return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
+        int F(Vector3Int c) => gCost[c] + Mathf.Abs(c.x - target.x) + Mathf.Abs(c.y - target.y);
     }
 
     private void OnDrawGizmos()
     {
-        if (currentPath == null || currentPath.Count == 0)
-            return;
-
         Gizmos.color = Color.cyan;
         Vector3 prev = transform.position;
         for (int i = currentWaypoint; i < currentPath.Count; i++)

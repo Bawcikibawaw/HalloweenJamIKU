@@ -4,133 +4,78 @@ using aTES;
 
 public class GameTimer : MonoBehaviour
 {
-    [Header("Timer UI")]
-    [SerializeField] private TMP_Text timerText;
-    [SerializeField] private TMP_Text warningText;
-
-    [Header("Timer Settings")]
     [SerializeField] private float levelDuration = 120f;
     [SerializeField] private float lastMinuteThreshold = 60f;
 
+    private TMP_Text timerText;
+    private TMP_Text warningText;
+    private LevelManager levelManager;
+
     private float initialTime;
     private float remainingTime;
-
-    private bool isTimerRunning;
-    private bool halfTimeTriggered;
-    private bool lastMinuteTriggered;
-    private bool timeUpTriggered;
-
-    private LevelManager levelManager;
+    private bool isRunning;
+    private bool halfTriggered;
+    private bool minuteTriggered;
 
     private void Start()
     {
+        timerText = GameObject.Find("TimerText")?.GetComponent<TMP_Text>();
+        warningText = GameObject.Find("WarningText")?.GetComponent<TMP_Text>();
         levelManager = FindFirstObjectByType<LevelManager>();
+
         if (levelManager != null)
-            levelManager.OnLevelChanged += HandleLevelChanged;
+            levelManager.OnLevelChanged += _ => StartTimer(levelDuration);
 
         StartTimer(levelDuration);
     }
 
-    private void OnDestroy()
+    public void StartTimer(float duration)
     {
-        if (levelManager != null)
-            levelManager.OnLevelChanged -= HandleLevelChanged;
-    }
-
-    private void HandleLevelChanged(int levelIndex) => StartTimer(levelDuration);
-
-    // Initializes the timer for a new level
-    public void StartTimer(float levelDuration)
-    {
-        initialTime = Mathf.Max(0f, levelDuration);
+        initialTime = Mathf.Max(0f, duration);
         remainingTime = initialTime;
+        halfTriggered = false;
+        minuteTriggered = false;
+        isRunning = initialTime > 0f;
 
-        halfTimeTriggered = false;
-        lastMinuteTriggered = false;
-        timeUpTriggered = false;
-
-        isTimerRunning = initialTime > 0f;
-
-        UpdateTimerUI();
-
-        if (warningText != null)
-            warningText.text = "";
-
-        if (!isTimerRunning)
-            TimeUp();
+        if (warningText != null) warningText.text = "";
+        UpdateUI();
     }
-
 
     private void Update()
     {
-        if (!isTimerRunning)
-            return;
+        if (!isRunning) return;
 
-        // Countdown
-        remainingTime -= Time.deltaTime;
-        remainingTime = Mathf.Max(remainingTime, 0f);
+        remainingTime = Mathf.Max(0f, remainingTime - Time.deltaTime);
+        UpdateUI();
 
-        UpdateTimerUI();
-        CheckTimeStamps();
-
-        // Check if time is up
-        if (remainingTime <= 0f && !timeUpTriggered)
-            TimeUp();
-    }
-
-
-    private void UpdateTimerUI()
-    {
-        if (timerText == null)
-            return;
-
-        int minutes = Mathf.FloorToInt(remainingTime / 60f);
-        int seconds = Mathf.FloorToInt(remainingTime % 60f);
-
-        timerText.text = $"{minutes:00}:{seconds:00}";
-    }
-
-
-    private void CheckTimeStamps()
-    {
-        // Half-time warning
-        if (!halfTimeTriggered &&
-            remainingTime <= initialTime / 2f)
+        if (!halfTriggered && remainingTime <= initialTime * 0.5f)
         {
-            halfTimeTriggered = true;
+            halfTriggered = true;
             ShowWarning("HALF TIME!");
         }
 
-        // Last minute warning
-        if (!lastMinuteTriggered &&
-            remainingTime <= lastMinuteThreshold)
+        if (!minuteTriggered && remainingTime <= lastMinuteThreshold)
         {
-            lastMinuteTriggered = true;
+            minuteTriggered = true;
             ShowWarning("1 MINUTE LEFT!");
+        }
+
+        if (remainingTime <= 0f)
+        {
+            isRunning = false;
+            ShowWarning("TIME IS UP!");
         }
     }
 
+    private void UpdateUI()
+    {
+        if (timerText != null)
+            timerText.text = $"{Mathf.FloorToInt(remainingTime / 60f):00}:{Mathf.FloorToInt(remainingTime % 60f):00}";
+    }
 
     private void ShowWarning(string message)
     {
-        if (warningText != null)
-            warningText.text = message;
-
+        if (warningText != null) warningText.text = message;
         Debug.Log(message);
-    }
-
-
-    private void TimeUp()
-    {
-        if (timeUpTriggered)
-            return;
-
-        timeUpTriggered = true;
-        isTimerRunning = false;
-
-        Debug.Log("TIME IS UP!");
-
-       // if (GameManager.Instance != null)
-         //   GameManager.Instance.HandleTimeExpired();
     }
 }
