@@ -1,31 +1,32 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.U2D.Sprites;
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using UnityEngine.UI;
 
 namespace aTES.EditorTools
 {
     /// <summary>
-    /// Builds 3 full 16x16 test levels under "Levels" in the "Path" scene using the user's sliced sprites.
-    /// Every level uses the full floor sheet and full outer-wall frame (with proper corners and edges),
-    /// plus connected interior barrier walls and corner caps from "duvarlar jem".
+    /// Builds the full system test setup in the currently open scene:
+    /// - 3 full 16x16 levels under "Levels" (LevelManager + PathCreator + BarrierTile)
+    /// - Player with PlayerAI, PlayerMoveRays, and HandPoint
+    /// - PlayerStartPoint and DeliveryPoint (with visual indicator)
+    /// - Item prefab, ItemData asset, and ItemManager (spawns 4 items per level)
+    /// - GameTimer with a UI Canvas (TimerText + WarningText)
     /// </summary>
     public static class PathTestSceneBuilder
     {
-        private const string ScenePath = "Assets/Scenes/Path.unity";
         private const string FloorSheet = "Assets/Sprites/bc conspt jem.png";
         private const string TileFolder = "Assets/Sprites/Tilemaps/Generated";
         private const int Cell = 16;
         private const int Size = 16;
         private const int EdgeMinPixels = 40;
 
-        // Legend for 16x16 interior barrier layouts (outer ring and floor come from the full sheets):
-        // '.' = empty, 'U'/'D'/'L'/'R' = straight barrier on Up/Down/Left/Right edge
-        // '1' = bottom-right cap (3_2), '2' = bottom-left cap (12_2), '3' = top-right cap (5_4), '4' = top-left cap (10_4)
         private static readonly string[] Level2Walls =
         {
             "................",
@@ -69,9 +70,6 @@ namespace aTES.EditorTools
         [MenuItem("Tools/aTES/Build Path Test Scene")]
         public static void Build()
         {
-            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-            EditorSceneManager.OpenScene(ScenePath);
-
             string[] walls = AssetDatabase.FindAssets("duvarlar jem t:Texture2D", new[] { "Assets/Sprites" }).Select(AssetDatabase.GUIDToAssetPath).ToArray();
             string inner = walls.Single(p => p.EndsWith("/duvarlar jem.png"));
             string outer = walls.Single(p => p != inner);
@@ -82,18 +80,21 @@ namespace aTES.EditorTools
             Directory.CreateDirectory(TileFolder);
             AssetDatabase.Refresh();
 
-            Object.DestroyImmediate(GameObject.Find("Grid"));
-            Object.DestroyImmediate(GameObject.Find("Levels"));
+            // Clean up previous scene objects
+            foreach (string name in new[] { "Grid", "Levels", "PlayerStartPoint", "DeliveryPoint", "ItemManager", "GameTimer", "Canvas" })
+            {
+                GameObject old = GameObject.Find(name);
+                if (old != null) Object.DestroyImmediate(old);
+            }
 
+            // 1. Levels + LevelManager + PathCreator
             GameObject levelsRoot = new GameObject("Levels");
-            LevelManager manager = levelsRoot.AddComponent<LevelManager>();
+            LevelManager levelManager = levelsRoot.AddComponent<LevelManager>();
 
-            // Level 1: painted directly from the 3 concept sheets.
             (Tilemap ground1, Tilemap walls1) = NewBaseLevel(levelsRoot.transform, "Level 1", outer);
             PaintSheet(inner, walls1, true);
             ground1.GetComponentInParent<PathCreator>().ScanMap();
 
-            // Load the 8 interior barrier/corner tiles generated from "duvarlar jem".
             Dictionary<char, TileBase> innerTiles = new Dictionary<char, TileBase>
             {
                 ['U'] = LoadTile("duvarlar jem_6_4"),
@@ -108,25 +109,158 @@ namespace aTES.EditorTools
 
             BuildCustomLevel(levelsRoot.transform, "Level 2", outer, Level2Walls, innerTiles);
             BuildCustomLevel(levelsRoot.transform, "Level 3", outer, Level3Walls, innerTiles);
+            levelManager.Show(0);
 
-            manager.Show(0);
+            // 2. Start & Delivery Points
+            Vector3 startWorld = ground1.GetCellCenterWorld(CellOf(2, 2));
+            Vector3 deliveryWorld = ground1.GetCellCenterWorld(CellOf(1, 13));
 
+            GameObject startPointObj = new GameObject("PlayerStartPoint");
+            startPointObj.transform.position = startWorld;
+
+            GameObject deliveryPointObj = new GameObject("DeliveryPoint");
+            deliveryPointObj.transform.position = deliveryWorld;
+            Sprite baseSprite = AssetDatabase.LoadAllAssetsAtPath(FloorSheet).OfType<Sprite>().First();
+            SpriteRenderer deliveryRenderer = deliveryPointObj.AddComponent<SpriteRenderer>();
+            deliveryRenderer.sprite = baseSprite;
+            deliveryRenderer.color = new Color(0.2f, 0.9f, 1f, 0.85f);
+            deliveryRenderer.sortingOrder = 2;
+            deliveryPointObj.transform.localScale = Vector3.one * 0.7f;
+
+            // 3. Player + HandPoint + PlayerMoveRays + PlayerAI
             GameObject player = GameObject.Find("Player");
+            if (player == null)
+            {
+                player = new GameObject("Player");
+                SpriteRenderer sr = player.AddComponent<SpriteRenderer>();
+                sr.sprite = baseSprite;
+                sr.color = Color.black;
+                sr.sortingOrder = 5;
+                player.AddComponent<CircleCollider2D>().radius = 0.3f;
+            }
             GameObjectUtility.RemoveMonoBehavioursWithMissingScript(player);
-            player.transform.position = ground1.GetCellCenterWorld(CellOf(2, 2));
-            if (!player.TryGetComponent(out PlayerMoveRays _)) player.AddComponent<PlayerMoveRays>();
+            player.transform.position = startWorld;
 
-            Camera.main.orthographicSize = Size / 2f + 1f;
-            Camera.main.transform.position = new Vector3(0f, 0f, -10f);
+            Transform handPoint = player.transform.Find("HandPoint");
+            if (handPoint == null)
+            {
+                GameObject hp = new GameObject("HandPoint");
+                hp.transform.SetParent(player.transform, false);
+                hp.transform.localPosition = new Vector3(0.4f, 0.3f, 0f);
+                handPoint = hp.transform;
+            }
+
+            if (!player.TryGetComponent(out PlayerMoveRays _)) player.AddComponent<PlayerMoveRays>();
+            if (!player.TryGetComponent(out PlayerAI playerAI)) playerAI = player.AddComponent<PlayerAI>();
+
+            SerializedObject aiSO = new SerializedObject(playerAI);
+            aiSO.FindProperty("handPoint").objectReferenceValue = handPoint;
+            aiSO.FindProperty("deliveryPoint").objectReferenceValue = deliveryPointObj.transform;
+            aiSO.FindProperty("moveSpeed").floatValue = 4f;
+            aiSO.ApplyModifiedPropertiesWithoutUndo();
+
+            // 4. Item Prefab + ItemData + ItemManager
+            ItemData itemData = CreateItemAssets(baseSprite);
+            GameObject itemManagerObj = new GameObject("ItemManager");
+            ItemManager itemManager = itemManagerObj.AddComponent<ItemManager>();
+
+            SerializedObject imSO = new SerializedObject(itemManager);
+            imSO.FindProperty("levelManager").objectReferenceValue = levelManager;
+            imSO.FindProperty("playerStartPoint").objectReferenceValue = startPointObj.transform;
+            imSO.FindProperty("deliveryPoint").objectReferenceValue = deliveryPointObj.transform;
+            SerializedProperty entries = imSO.FindProperty("spawnEntries");
+            entries.ClearArray();
+            entries.InsertArrayElementAtIndex(0);
+            entries.GetArrayElementAtIndex(0).FindPropertyRelative("itemData").objectReferenceValue = itemData;
+            entries.GetArrayElementAtIndex(0).FindPropertyRelative("amount").intValue = 4;
+            imSO.ApplyModifiedPropertiesWithoutUndo();
+
+            // 5. GameTimer + UI Canvas
+            SetupTimerUI();
+
+            // 6. Camera
+            if (Camera.main != null)
+            {
+                Camera.main.orthographicSize = Size / 2f + 1f;
+                Camera.main.transform.position = new Vector3(0f, 0f, -10f);
+            }
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
-            EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
-            Debug.Log("[PathTestSceneBuilder] Built 3 full 16x16 levels under 'Levels'.");
+            if (!string.IsNullOrEmpty(EditorSceneManager.GetActiveScene().path))
+            {
+                EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
+            }
+            Debug.Log($"[PathTestSceneBuilder] Built full system test in scene '{EditorSceneManager.GetActiveScene().name}'.");
+        }
+
+        private static ItemData CreateItemAssets(Sprite sprite)
+        {
+            string prefabPath = $"{TileFolder}/TestItem.prefab";
+            string dataPath = $"{TileFolder}/TestItemData.asset";
+
+            GameObject temp = new GameObject("TestItem");
+            SpriteRenderer sr = temp.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.color = new Color(1f, 0.85f, 0.1f, 1f);
+            sr.sortingOrder = 4;
+            temp.transform.localScale = Vector3.one * 0.5f;
+            CircleCollider2D col = temp.AddComponent<CircleCollider2D>();
+            col.isTrigger = true;
+            temp.AddComponent<Item>();
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(temp, prefabPath);
+            Object.DestroyImmediate(temp);
+
+            ItemData data = ScriptableObject.CreateInstance<ItemData>();
+            data.itemName = "Candy";
+            data.itemPrefab = prefab;
+            data.itemSprite = sprite;
+            AssetDatabase.CreateAsset(data, dataPath);
+            AssetDatabase.SaveAssets();
+            return data;
+        }
+
+        private static void SetupTimerUI()
+        {
+            GameObject canvasObj = new GameObject("Canvas");
+            Canvas canvas = canvasObj.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasObj.AddComponent<CanvasScaler>();
+            canvasObj.AddComponent<GraphicRaycaster>();
+
+            TextMeshProUGUI timerTMP = CreateTMP(canvasObj.transform, "TimerText", new Vector2(0f, -30f), 32, Color.white);
+            TextMeshProUGUI warningTMP = CreateTMP(canvasObj.transform, "WarningText", new Vector2(0f, -70f), 24, new Color(1f, 0.4f, 0.2f));
+
+            GameObject timerObj = new GameObject("GameTimer");
+            GameTimer gameTimer = timerObj.AddComponent<GameTimer>();
+            SerializedObject gtSO = new SerializedObject(gameTimer);
+            gtSO.FindProperty("timerText").objectReferenceValue = timerTMP;
+            gtSO.FindProperty("warningText").objectReferenceValue = warningTMP;
+            gtSO.FindProperty("levelDuration").floatValue = 120f;
+            gtSO.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static TextMeshProUGUI CreateTMP(Transform parent, string name, Vector2 anchoredPos, float fontSize, Color color)
+        {
+            GameObject go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            RectTransform rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 1f);
+            rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.anchoredPosition = anchoredPos;
+            rt.sizeDelta = new Vector2(400f, 50f);
+
+            TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
+            tmp.fontSize = fontSize;
+            tmp.alignment = TextAlignmentOptions.Center;
+            tmp.color = color;
+            tmp.text = "";
+            return tmp;
         }
 
         private static TileBase LoadTile(string name) => AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{name}.asset");
 
-        /// <summary>Creates a 16x16 level with the full floor sheet and full outer-wall frame already painted.</summary>
         private static (Tilemap ground, Tilemap walls) NewBaseLevel(Transform parent, string name, string outerPath)
         {
             GameObject level = new GameObject(name);
@@ -256,17 +390,6 @@ namespace aTES.EditorTools
             Tilemap tm = go.AddComponent<Tilemap>();
             go.AddComponent<TilemapRenderer>().sortingOrder = order;
             return tm;
-        }
-
-        [InitializeOnLoadMethod]
-        private static void AutoRunOnce()
-        {
-            EditorApplication.delayCall += () =>
-            {
-                if (SessionState.GetBool("aTES_3LevelsBuilt_v3", false)) return;
-                SessionState.SetBool("aTES_3LevelsBuilt_v3", true);
-                Build();
-            };
         }
     }
 }

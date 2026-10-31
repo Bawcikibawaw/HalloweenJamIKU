@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 using aTES;
 
@@ -18,6 +19,14 @@ public class Item : MonoBehaviour
             return false;
 
         return ItemManager.Instance.TryMoveItem(this, targetCell);
+    }
+
+    [ContextMenu("Move To Random Walkable Cell")]
+    private void MoveToRandomWalkableCell()
+    {
+        if (PathCreator.Active == null) return;
+        Vector3Int[] walkable = PathCreator.Active.Cells.Where(kv => kv.Value.walkable).Select(kv => kv.Key).ToArray();
+        if (walkable.Length > 0) MoveToCell(walkable[Random.Range(0, walkable.Length)]);
     }
 
     public void PickUp(Transform handPoint)

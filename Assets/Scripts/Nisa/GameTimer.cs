@@ -1,6 +1,6 @@
-
 using UnityEngine;
 using TMPro;
+using aTES;
 
 public class GameTimer : MonoBehaviour
 {
@@ -9,6 +9,7 @@ public class GameTimer : MonoBehaviour
     [SerializeField] private TMP_Text warningText;
 
     [Header("Timer Settings")]
+    [SerializeField] private float levelDuration = 120f;
     [SerializeField] private float lastMinuteThreshold = 60f;
 
     private float initialTime;
@@ -19,6 +20,24 @@ public class GameTimer : MonoBehaviour
     private bool lastMinuteTriggered;
     private bool timeUpTriggered;
 
+    private LevelManager levelManager;
+
+    private void Start()
+    {
+        levelManager = FindFirstObjectByType<LevelManager>();
+        if (levelManager != null)
+            levelManager.OnLevelChanged += HandleLevelChanged;
+
+        StartTimer(levelDuration);
+    }
+
+    private void OnDestroy()
+    {
+        if (levelManager != null)
+            levelManager.OnLevelChanged -= HandleLevelChanged;
+    }
+
+    private void HandleLevelChanged(int levelIndex) => StartTimer(levelDuration);
 
     // Initializes the timer for a new level
     public void StartTimer(float levelDuration)

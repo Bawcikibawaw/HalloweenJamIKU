@@ -1,4 +1,3 @@
-
 using System.Collections.Generic;
 using UnityEngine;
 using aTES;
@@ -18,12 +17,14 @@ public class PlayerAI : MonoBehaviour
     [SerializeField] private Transform deliveryPoint;
 
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 2f;
+    [SerializeField] private float moveSpeed = 4f;
     [SerializeField] private float arrivalDistance = 0.05f;
 
     private AIState currentState = AIState.FindingItem;
 
     private PathCreator pathCreator;
+    private LevelManager levelManager;
+    private Transform startPoint;
     private Item currentTarget;
 
     private List<Vector3> currentPath = new();
@@ -32,6 +33,15 @@ public class PlayerAI : MonoBehaviour
     private void Start()
     {
         pathCreator = PathCreator.Active;
+
+        if (handPoint == null)
+            handPoint = transform.Find("HandPoint");
+
+        if (deliveryPoint == null)
+            deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
+
+        startPoint = GameObject.Find("PlayerStartPoint")?.transform;
+        levelManager = FindFirstObjectByType<LevelManager>();
 
         if (handPoint == null || deliveryPoint == null)
         {
@@ -48,6 +58,10 @@ public class PlayerAI : MonoBehaviour
         }
 
         ItemManager.Instance.OnItemPositionChanged += HandleItemPositionChanged;
+        ItemManager.Instance.OnItemsChanged += HandleItemsChanged;
+
+        if (levelManager != null)
+            levelManager.OnLevelChanged += HandleLevelChanged;
 
         FindNextItem();
     }
@@ -57,7 +71,35 @@ public class PlayerAI : MonoBehaviour
         if (ItemManager.Instance != null)
         {
             ItemManager.Instance.OnItemPositionChanged -= HandleItemPositionChanged;
+            ItemManager.Instance.OnItemsChanged -= HandleItemsChanged;
         }
+
+        if (levelManager != null)
+            levelManager.OnLevelChanged -= HandleLevelChanged;
+    }
+
+    private void HandleItemsChanged()
+    {
+        if (currentState == AIState.Finished && ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count > 0)
+        {
+            currentState = AIState.FindingItem;
+        }
+    }
+
+    private void HandleLevelChanged(int levelIndex)
+    {
+        if (currentTarget != null)
+        {
+            Destroy(currentTarget.gameObject);
+            currentTarget = null;
+        }
+
+        if (startPoint != null)
+            transform.position = startPoint.position;
+
+        currentPath.Clear();
+        currentWaypoint = 0;
+        currentState = AIState.FindingItem;
     }
 
     private void Update()
@@ -181,6 +223,12 @@ public class PlayerAI : MonoBehaviour
 
             currentPath.Clear();
             currentWaypoint = 0;
+
+            if (ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count == 0 && levelManager != null)
+            {
+                levelManager.Next();
+                return;
+            }
 
             currentState = AIState.FindingItem;
         }
@@ -334,5 +382,20 @@ public class PlayerAI : MonoBehaviour
     private int GetHeuristic(Vector3Int a, Vector3Int b)
     {
         return Mathf.Abs(a.x - b.x) + Mathf.Abs(a.y - b.y);
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (currentPath == null || currentPath.Count == 0)
+            return;
+
+        Gizmos.color = Color.cyan;
+        Vector3 prev = transform.position;
+        for (int i = currentWaypoint; i < currentPath.Count; i++)
+        {
+            Gizmos.DrawLine(prev, currentPath[i]);
+            Gizmos.DrawSphere(currentPath[i], 0.08f);
+            prev = currentPath[i];
+        }
     }
 }

@@ -45,6 +45,15 @@ public class ItemManager : MonoBehaviour
     private void Start()
     {
         if (levelManager == null)
+            levelManager = FindFirstObjectByType<LevelManager>();
+
+        if (playerStartPoint == null)
+            playerStartPoint = GameObject.Find("PlayerStartPoint")?.transform;
+
+        if (deliveryPoint == null)
+            deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
+
+        if (levelManager == null)
         {
             Debug.LogError("ItemManager: LevelManager reference is missing.", this);
             return;
