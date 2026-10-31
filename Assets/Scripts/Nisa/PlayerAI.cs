@@ -151,9 +151,10 @@ public class PlayerAI : MonoBehaviour
         currentPath.Clear();
         currentWaypoint = 0;
 
-        if (ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count == 0 && levelManager != null)
+        if (ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count == 0)
         {
-            levelManager.Next();
+            currentState = AIState.Finished;
+            FindFirstObjectByType<GameTimer>()?.FailLevel();
             return;
         }
 

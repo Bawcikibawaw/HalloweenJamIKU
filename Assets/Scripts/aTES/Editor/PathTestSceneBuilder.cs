@@ -483,6 +483,73 @@ namespace aTES.EditorTools
             startTmp.raycastTarget = false;
 
             choosePanel.AddComponent<SkillChooseScreen>();
+
+            // 7. Level Won & Level Failed UI Panels (ready for custom UI artwork sprites)
+            CreateResultModal(
+                canvasObj.transform,
+                "LevelWonPanel",
+                "LEVEL WON!",
+                "The chef ran out of time!",
+                "NEXT LEVEL",
+                new Color(0.25f, 0.85f, 0.45f, 1f),
+                placeholderSprite);
+
+            CreateResultModal(
+                canvasObj.transform,
+                "LevelFailedPanel",
+                "LEVEL FAILED!",
+                "The chef gathered all the ingredients!",
+                "TRY AGAIN",
+                new Color(0.9f, 0.25f, 0.25f, 1f),
+                placeholderSprite);
+        }
+
+        private static GameObject CreateResultModal(Transform parent, string name, string title, string subtitle, string buttonLabel, Color accentColor, Sprite placeholderSprite)
+        {
+            GameObject modal = CreatePanel(
+                parent,
+                name,
+                new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f),
+                new Vector2(-140f, 0f),
+                new Vector2(1000f, 1000f),
+                new Color(0.04f, 0.04f, 0.06f, 0.96f),
+                accentColor);
+
+            GameObject artworkObj = new GameObject("Artwork");
+            artworkObj.transform.SetParent(modal.transform, false);
+            RectTransform artRt = artworkObj.AddComponent<RectTransform>();
+            artRt.anchorMin = new Vector2(0.5f, 0.5f);
+            artRt.anchorMax = new Vector2(0.5f, 0.5f);
+            artRt.pivot = new Vector2(0.5f, 0.5f);
+            artRt.anchoredPosition = new Vector2(0f, 90f);
+            artRt.sizeDelta = new Vector2(520f, 520f);
+            Image artImg = artworkObj.AddComponent<Image>();
+            artImg.sprite = placeholderSprite;
+            artImg.color = Color.Lerp(accentColor, Color.white, 0.25f);
+            artImg.preserveAspect = true;
+
+            CreateTMP(modal.transform, "Title", new Vector2(0.5f, 1f), new Vector2(0f, -50f), 52, accentColor, title);
+            TextMeshProUGUI subTmp = CreateTMP(modal.transform, "Subtitle", new Vector2(0.5f, 0f), new Vector2(0f, 200f), 26, new Color(0.85f, 0.85f, 0.9f), subtitle);
+            subTmp.rectTransform.sizeDelta = new Vector2(800f, 45f);
+
+            GameObject actionBtn = CreatePanel(
+                modal.transform,
+                "ActionButton",
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 55f),
+                new Vector2(340f, 76f),
+                new Color(accentColor.r * 0.45f, accentColor.g * 0.45f, accentColor.b * 0.45f, 1f),
+                accentColor);
+            actionBtn.AddComponent<Button>().targetGraphic = actionBtn.GetComponent<Image>();
+
+            TextMeshProUGUI btnTmp = CreateTMP(actionBtn.transform, "Text", new Vector2(0.5f, 0.5f), Vector2.zero, 32, Color.white, buttonLabel);
+            btnTmp.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            btnTmp.raycastTarget = false;
+
+            modal.SetActive(false);
+            return modal;
         }
 
         private static GameObject CreatePanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 pos, Vector2 size, Color bgColor, Color borderColor)
