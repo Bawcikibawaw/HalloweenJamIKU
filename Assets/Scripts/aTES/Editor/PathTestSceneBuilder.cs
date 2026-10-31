@@ -10,10 +10,9 @@ using UnityEngine.Tilemaps;
 namespace aTES.EditorTools
 {
     /// <summary>
-    /// Builds 3 test levels under "Levels" in the "Path" scene using the user's sliced sprites:
-    /// - Level 1: Original 16x16 concept sheet layout.
-    /// - Level 2: 16x16 chamber/corridor layout with half-barriers and solid blocks.
-    /// - Level 3: 12x10 compact arena to test automatic bounds calculation on different map sizes.
+    /// Builds 3 full 16x16 test levels under "Levels" in the "Path" scene using the user's sliced sprites.
+    /// Every level uses the full floor sheet and full outer-wall frame (with proper corners and edges),
+    /// plus connected interior barrier walls and corner caps from "duvarlar jem".
     /// </summary>
     public static class PathTestSceneBuilder
     {
@@ -24,40 +23,47 @@ namespace aTES.EditorTools
         private const int Size = 16;
         private const int EdgeMinPixels = 40;
 
-        // Legend for custom layouts:
-        // '#' = outer solid wall, '.' = floor, '^'/'v'/'<'/'>' = floor + half-barrier on Up/Down/Left/Right
-        private static readonly string[] Level2Map =
+        // Legend for 16x16 interior barrier layouts (outer ring and floor come from the full sheets):
+        // '.' = empty, 'U'/'D'/'L'/'R' = straight barrier on Up/Down/Left/Right edge
+        // '1' = bottom-right cap (3_2), '2' = bottom-left cap (12_2), '3' = top-right cap (5_4), '4' = top-left cap (10_4)
+        private static readonly string[] Level2Walls =
         {
-            "################",
-            "#..............#",
-            "#..^^^^^^..vv..#",
-            "#..<....>......#",
-            "#..<....>..##..#",
-            "#..<....>..##..#",
-            "#..vvvvvv......#",
-            "#..............#",
-            "#....^^....^^..#",
-            "#...<..>..<..>.#",
-            "#...<..>..<..>.#",
-            "#....vv....vv..#",
-            "#..............#",
-            "#..>>>>..<<<<..#",
-            "#..............#",
-            "################",
+            "................",
+            "................",
+            "..1DDDDDDDDDD2..",
+            "..R..........L..",
+            "..R..1DDDD2..L..",
+            "..R..R....L..L..",
+            "..3UU4....3UU4..",
+            "................",
+            "..1DDDD2..1DD2..",
+            "..R....L..R..L..",
+            "..R....L..R..L..",
+            "..R.......R..L..",
+            "..3UUUUUUU4..L..",
+            ".............L..",
+            "..UUUUUUUUUUU4..",
+            "................",
         };
 
-        private static readonly string[] Level3Map =
+        private static readonly string[] Level3Walls =
         {
-            "############",
-            "#..........#",
-            "#..^^^^....#",
-            "#..<..>..#.#",
-            "#........#.#",
-            "#.#..vvvv..#",
-            "#.#........#",
-            "#....^^^^..#",
-            "#..........#",
-            "############",
+            "................",
+            "................",
+            "..1DDDD2.1DDD2..",
+            "..R....L.R...L..",
+            "..R....L.....L..",
+            "..3UU2.3UUUUU4..",
+            ".....L..........",
+            "..1DD4...1DDD2..",
+            "..R......R...L..",
+            "..R..R...R...L..",
+            "..R..R.......L..",
+            "..R..3UUUUUUU4..",
+            "..R.............",
+            "..3UUUUUUUUUU2..",
+            ".............L..",
+            "................",
         };
 
         [MenuItem("Tools/aTES/Build Path Test Scene")]
@@ -83,33 +89,31 @@ namespace aTES.EditorTools
             LevelManager manager = levelsRoot.AddComponent<LevelManager>();
 
             // Level 1: painted directly from the 3 concept sheets.
-            (Tilemap ground1, Tilemap walls1) = NewLevel(levelsRoot.transform, "Level 1");
-            PaintSheet(FloorSheet, ground1, false);
-            PaintSheet(outer, walls1, false);
+            (Tilemap ground1, Tilemap walls1) = NewBaseLevel(levelsRoot.transform, "Level 1", outer);
             PaintSheet(inner, walls1, true);
             ground1.GetComponentInParent<PathCreator>().ScanMap();
 
-            // Reuse the generated tiles from Level 1 to paint Level 2 and Level 3.
-            TileBase[] floors = new[] { "bc conspt jem_1_1", "bc conspt jem_2_1", "bc conspt jem_3_1" }
-                .Select(n => AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{n}.asset")).ToArray();
-            TileBase solidWall = AssetDatabase.LoadAssetAtPath<TileBase>(
-                AssetDatabase.FindAssets("duvarlar t:Tile", new[] { TileFolder })
-                    .Select(AssetDatabase.GUIDToAssetPath)
-                    .First(p => !(AssetDatabase.LoadAssetAtPath<TileBase>(p) is BarrierTile)));
-            Dictionary<TileSides, TileBase> barrierBySide = AssetDatabase.FindAssets("t:BarrierTile", new[] { TileFolder })
-                .Select(g => AssetDatabase.LoadAssetAtPath<BarrierTile>(AssetDatabase.GUIDToAssetPath(g)))
-                .Where(b => b.BlockedSides != TileSides.None)
-                .GroupBy(b => b.BlockedSides)
-                .ToDictionary(g => g.Key, g => (TileBase)g.First());
+            // Load the 8 interior barrier/corner tiles generated from "duvarlar jem".
+            Dictionary<char, TileBase> innerTiles = new Dictionary<char, TileBase>
+            {
+                ['U'] = LoadTile("duvarlar jem_6_4"),
+                ['D'] = LoadTile("duvarlar jem_4_2"),
+                ['L'] = LoadTile("duvarlar jem_12_3"),
+                ['R'] = LoadTile("duvarlar jem_3_3"),
+                ['1'] = LoadTile("duvarlar jem_3_2"),
+                ['2'] = LoadTile("duvarlar jem_12_2"),
+                ['3'] = LoadTile("duvarlar jem_5_4"),
+                ['4'] = LoadTile("duvarlar jem_10_4"),
+            };
 
-            BuildPatternLevel(levelsRoot.transform, "Level 2", Level2Map, floors, solidWall, barrierBySide);
-            BuildPatternLevel(levelsRoot.transform, "Level 3", Level3Map, floors, solidWall, barrierBySide);
+            BuildCustomLevel(levelsRoot.transform, "Level 2", outer, Level2Walls, innerTiles);
+            BuildCustomLevel(levelsRoot.transform, "Level 3", outer, Level3Walls, innerTiles);
 
             manager.Show(0);
 
             GameObject player = GameObject.Find("Player");
             GameObjectUtility.RemoveMonoBehavioursWithMissingScript(player);
-            player.transform.position = ground1.GetCellCenterWorld(CellOf(2, 2, Size, Size));
+            player.transform.position = ground1.GetCellCenterWorld(CellOf(2, 2));
             if (!player.TryGetComponent(out PlayerMoveRays _)) player.AddComponent<PlayerMoveRays>();
 
             Camera.main.orthographicSize = Size / 2f + 1f;
@@ -117,10 +121,13 @@ namespace aTES.EditorTools
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
             EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
-            Debug.Log("[PathTestSceneBuilder] Built 3 test levels under 'Levels'.");
+            Debug.Log("[PathTestSceneBuilder] Built 3 full 16x16 levels under 'Levels'.");
         }
 
-        private static (Tilemap ground, Tilemap walls) NewLevel(Transform parent, string name)
+        private static TileBase LoadTile(string name) => AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{name}.asset");
+
+        /// <summary>Creates a 16x16 level with the full floor sheet and full outer-wall frame already painted.</summary>
+        private static (Tilemap ground, Tilemap walls) NewBaseLevel(Transform parent, string name, string outerPath)
         {
             GameObject level = new GameObject(name);
             level.transform.SetParent(parent, false);
@@ -128,42 +135,29 @@ namespace aTES.EditorTools
             Tilemap ground = NewTilemap(level, "Ground", 0);
             Tilemap walls = NewTilemap(level, "Walls", 1);
             level.AddComponent<PathCreator>();
+
+            PaintSheet(FloorSheet, ground, false);
+            PaintSheet(outerPath, walls, false);
             return (ground, walls);
         }
 
-        private static void BuildPatternLevel(
-            Transform parent,
-            string name,
-            string[] rows,
-            TileBase[] floors,
-            TileBase solidWall,
-            Dictionary<TileSides, TileBase> barriers)
+        private static void BuildCustomLevel(Transform parent, string name, string outerPath, string[] layout, Dictionary<char, TileBase> tiles)
         {
-            (Tilemap ground, Tilemap walls) = NewLevel(parent, name);
-            int h = rows.Length, w = rows[0].Length;
-
-            for (int r = 0; r < h; r++)
+            (Tilemap ground, Tilemap walls) = NewBaseLevel(parent, name, outerPath);
+            for (int r = 0; r < Size; r++)
             {
-                for (int c = 0; c < w; c++)
+                for (int c = 0; c < Size; c++)
                 {
-                    Vector3Int cell = CellOf(c, r, w, h);
-                    char ch = rows[r][c];
-                    if (ch == '#')
+                    if (tiles.TryGetValue(layout[r][c], out TileBase tile))
                     {
-                        walls.SetTile(cell, solidWall);
-                        continue;
+                        walls.SetTile(CellOf(c, r), tile);
                     }
-
-                    ground.SetTile(cell, floors[(c + r) % floors.Length]);
-                    TileSides side = ch == '^' ? TileSides.Up : ch == 'v' ? TileSides.Down : ch == '<' ? TileSides.Left : ch == '>' ? TileSides.Right : TileSides.None;
-                    if (side != TileSides.None && barriers.TryGetValue(side, out TileBase b)) walls.SetTile(cell, b);
                 }
             }
-
             ground.GetComponentInParent<PathCreator>().ScanMap();
         }
 
-        private static Vector3Int CellOf(int col, int row, int cols, int rows) => new Vector3Int(col - cols / 2, rows / 2 - 1 - row, 0);
+        private static Vector3Int CellOf(int col, int row) => new Vector3Int(col - Size / 2, Size / 2 - 1 - row, 0);
 
         private static void Slice(string path)
         {
@@ -214,11 +208,12 @@ namespace aTES.EditorTools
                 string name = $"{sheet}_{col}_{row}";
                 if (!tiles.TryGetValue(hash.ToHashCode(), out TileBase tile))
                 {
-                    tile = NewTile($"{TileFolder}/{name}.asset", sprites[name], barriers ? px : null);
+                    tile = AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{name}.asset")
+                           ?? NewTile($"{TileFolder}/{name}.asset", sprites[name], barriers ? px : null);
                     tiles[hash.ToHashCode()] = tile;
                 }
 
-                target.SetTile(CellOf(col, row, Size, Size), tile);
+                target.SetTile(CellOf(col, row), tile);
             }
 
             Object.DestroyImmediate(tex);
@@ -268,8 +263,8 @@ namespace aTES.EditorTools
         {
             EditorApplication.delayCall += () =>
             {
-                if (SessionState.GetBool("aTES_3LevelsBuilt_v2", false)) return;
-                SessionState.SetBool("aTES_3LevelsBuilt_v2", true);
+                if (SessionState.GetBool("aTES_3LevelsBuilt_v3", false)) return;
+                SessionState.SetBool("aTES_3LevelsBuilt_v3", true);
                 Build();
             };
         }
