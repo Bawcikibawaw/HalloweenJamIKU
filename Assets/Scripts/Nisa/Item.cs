@@ -45,8 +45,27 @@ public class Item : MonoBehaviour
             itemCollider.enabled = false;
     }
 
+    /// <summary>Puts a carried item back on the floor and makes it collectable again.</summary>
+    public void Drop(Vector3 position)
+    {
+        if (!IsCollected || ItemManager.Instance == null || PathCreator.Active == null)
+            return;
+
+        IsCollected = false;
+        transform.SetParent(PathCreator.Active.transform);
+        transform.position = position;
+
+        if (TryGetComponent<Collider2D>(out Collider2D itemCollider))
+            itemCollider.enabled = true;
+
+        ItemManager.Instance.RegisterItem(this, position);
+    }
+
     public void Deliver()
     {
+        if (ItemManager.Instance != null)
+            ItemManager.Instance.RecordGatheredIngredient(Data);
+
         Destroy(gameObject);
     }
 }

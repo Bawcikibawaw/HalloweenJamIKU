@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using UnityEngine.UI;
 using aTES;
 
 [Serializable]
@@ -17,11 +19,14 @@ public class ItemManager : MonoBehaviour
     [SerializeField] private List<ItemSpawnEntry> spawnEntries = new();
 
     private readonly Dictionary<Item, Vector3> activeItems = new();
+    private readonly List<Image> ingredientSlots = new();
+    private int gatheredCount;
     private LevelManager levelManager;
     private Transform playerStartPoint;
     private Transform deliveryPoint;
 
     public IReadOnlyDictionary<Item, Vector3> ActiveItems => activeItems;
+    public ItemData RandomItemData => spawnEntries.Count > 0 ? spawnEntries[UnityEngine.Random.Range(0, spawnEntries.Count)].itemData : null;
 
     public event Action OnItemsChanged;
     public event Action<Item, Vector3> OnItemPositionChanged;
@@ -42,9 +47,21 @@ public class ItemManager : MonoBehaviour
         playerStartPoint = GameObject.Find("PlayerStartPoint")?.transform ?? GameObject.Find("Player")?.transform;
         deliveryPoint = GameObject.Find("DeliveryPoint")?.transform;
 
+        GameObject panel = GameObject.Find("IngredientsPanel");
+        if (panel != null)
+        {
+            for (int i = 0; i < panel.transform.childCount; i++)
+            {
+                Transform icon = panel.transform.GetChild(i).Find("Icon");
+                if (icon != null && icon.TryGetComponent(out Image img))
+                    ingredientSlots.Add(img);
+            }
+        }
+
         if (levelManager != null)
             levelManager.OnLevelChanged += HandleLevelChanged;
 
+        ResetIngredientSlots();
         SpawnLevelItems();
     }
 
@@ -60,7 +77,28 @@ public class ItemManager : MonoBehaviour
     private void HandleLevelChanged(int _)
     {
         ClearItems();
+        ResetIngredientSlots();
         SpawnLevelItems();
+    }
+
+    public void RecordGatheredIngredient(ItemData data)
+    {
+        if (data == null || gatheredCount >= ingredientSlots.Count) return;
+
+        Image slot = ingredientSlots[gatheredCount++];
+        Sprite icon = data.gatheredSprite != null ? data.gatheredSprite : data.itemSprite;
+        if (icon != null) slot.sprite = icon;
+        slot.color = Color.white;
+        slot.enabled = true;
+    }
+
+    private void ResetIngredientSlots()
+    {
+        gatheredCount = 0;
+        foreach (Image slot in ingredientSlots)
+        {
+            if (slot != null) slot.enabled = false;
+        }
     }
 
     public void SpawnLevelItems()
@@ -68,7 +106,7 @@ public class ItemManager : MonoBehaviour
         PathCreator map = PathCreator.Active;
         if (map == null || playerStartPoint == null) return;
 
-        List<Vector3Int> cells = GetReachableCells(map);
+        List<Vector3Int> cells = GetFreeCells(map.WorldToCell(playerStartPoint.position));
         for (int i = cells.Count - 1; i > 0; i--)
         {
             int j = UnityEngine.Random.Range(0, i + 1);
@@ -78,40 +116,45 @@ public class ItemManager : MonoBehaviour
         int index = 0;
         foreach (ItemSpawnEntry entry in spawnEntries)
         {
-            if (entry.itemData == null || entry.itemData.itemPrefab == null) continue;
-
-            for (int i = 0; i < entry.amount && index < cells.Count; i++, index++)
+            for (int i = 0; i < entry.amount && index < cells.Count; i++)
             {
-                Vector3 pos = map.Cells[cells[index]].center;
-                GameObject obj = Instantiate(entry.itemData.itemPrefab, pos, Quaternion.identity, map.transform);
-                if (!obj.TryGetComponent(out Item item))
-                {
-                    Destroy(obj);
-                    continue;
-                }
-
-                item.Initialize(entry.itemData);
-                if (entry.itemData.itemSprite != null && obj.TryGetComponent(out SpriteRenderer sr))
-                    sr.sprite = entry.itemData.itemSprite;
-
-                activeItems[item] = pos;
+                if (SpawnItem(entry.itemData, cells[index]) != null) index++;
             }
         }
-
-        OnItemsChanged?.Invoke();
     }
 
-    private List<Vector3Int> GetReachableCells(PathCreator map)
+    /// <summary>Spawns one item on a cell and registers it. Returns null if the data/prefab is invalid.</summary>
+    public Item SpawnItem(ItemData data, Vector3Int cell)
     {
-        Vector3Int startCell = map.WorldToCell(playerStartPoint.position);
-        Vector3Int deliveryCell = deliveryPoint != null ? map.WorldToCell(deliveryPoint.position) : startCell;
-        List<Vector3Int> result = new();
+        PathCreator map = PathCreator.Active;
+        if (map == null || data == null || data.itemPrefab == null) return null;
 
-        if (!map.IsWalkable(startCell)) return result;
+        Vector3 pos = map.CellToWorldCenter(cell);
+        GameObject obj = Instantiate(data.itemPrefab, pos, Quaternion.identity, map.transform);
+        if (!obj.TryGetComponent(out Item item))
+        {
+            Destroy(obj);
+            return null;
+        }
+
+        item.Initialize(data);
+        if (data.itemSprite != null && obj.TryGetComponent(out SpriteRenderer sr))
+            sr.sprite = data.itemSprite;
+
+        RegisterItem(item, pos);
+        return item;
+    }
+
+    /// <summary>Maze (walking) distance from <paramref name="start"/> to every cell reachable from it.</summary>
+    public Dictionary<Vector3Int, int> FloodFill(Vector3Int start)
+    {
+        PathCreator map = PathCreator.Active;
+        Dictionary<Vector3Int, int> dist = new();
+        if (map == null || !map.IsWalkable(start)) return dist;
 
         Queue<Vector3Int> queue = new();
-        HashSet<Vector3Int> visited = new() { startCell };
-        queue.Enqueue(startCell);
+        dist[start] = 0;
+        queue.Enqueue(start);
 
         while (queue.Count > 0)
         {
@@ -119,18 +162,39 @@ public class ItemManager : MonoBehaviour
             foreach (Vector3Int dir in Sides.Dir)
             {
                 Vector3Int next = current + dir;
-                if (map.CanMove(current, next) && visited.Add(next))
+                if (map.CanMove(current, next) && dist.TryAdd(next, dist[current] + 1))
                     queue.Enqueue(next);
             }
         }
 
-        foreach (Vector3Int cell in visited)
-        {
-            if (cell != startCell && cell != deliveryCell)
-                result.Add(cell);
-        }
+        return dist;
+    }
 
-        return result;
+    /// <summary>
+    /// Cells the player can reach that are empty (no item, not start/delivery, not <paramref name="from"/>),
+    /// sorted farthest-first by walking distance from <paramref name="from"/>.
+    /// </summary>
+    public List<Vector3Int> GetFreeCells(Vector3Int from)
+    {
+        PathCreator map = PathCreator.Active;
+        if (map == null || playerStartPoint == null) return new List<Vector3Int>();
+
+        Vector3Int startCell = map.WorldToCell(playerStartPoint.position);
+        HashSet<Vector3Int> blocked = new() { from, startCell };
+        if (deliveryPoint != null) blocked.Add(map.WorldToCell(deliveryPoint.position));
+        foreach (Vector3 pos in activeItems.Values) blocked.Add(map.WorldToCell(pos));
+
+        Dictionary<Vector3Int, int> dist = FloodFill(from);
+        return FloodFill(startCell).Keys
+            .Where(c => !blocked.Contains(c))
+            .OrderByDescending(c => dist.TryGetValue(c, out int d) ? d : 0)
+            .ToList();
+    }
+
+    public void RegisterItem(Item item, Vector3 position)
+    {
+        activeItems[item] = position;
+        OnItemsChanged?.Invoke();
     }
 
     public void UnregisterItem(Item item)
@@ -142,7 +206,8 @@ public class ItemManager : MonoBehaviour
     public bool TryMoveItem(Item item, Vector3Int targetCell)
     {
         PathCreator map = PathCreator.Active;
-        if (item == null || item.IsCollected || map == null || !activeItems.ContainsKey(item) || !GetReachableCells(map).Contains(targetCell))
+        if (item == null || item.IsCollected || map == null || playerStartPoint == null || !activeItems.ContainsKey(item)
+            || !FloodFill(map.WorldToCell(playerStartPoint.position)).ContainsKey(targetCell))
             return false;
 
         foreach (KeyValuePair<Item, Vector3> kv in activeItems)
