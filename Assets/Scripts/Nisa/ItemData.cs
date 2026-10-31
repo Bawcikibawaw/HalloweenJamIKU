@@ -6,4 +6,5 @@ public class ItemData : ScriptableObject
     public string itemName;
     public GameObject itemPrefab;
     public Sprite itemSprite;
+    public Sprite gatheredSprite;
 }

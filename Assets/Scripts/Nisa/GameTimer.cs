@@ -41,6 +41,13 @@ public class GameTimer : MonoBehaviour
         UpdateUI();
     }
 
+    /// <summary>Adds (or with a negative value, removes) time from the running timer.</summary>
+    public void AddTime(float seconds)
+    {
+        remainingTime = Mathf.Max(0f, remainingTime + seconds);
+        UpdateUI();
+    }
+
     private void Update()
     {
         if (!isRunning) return;

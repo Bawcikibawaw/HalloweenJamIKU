@@ -20,6 +20,11 @@ public class PlayerAI : MonoBehaviour
     private List<Vector3> currentPath = new();
     private int currentWaypoint;
 
+    /// <summary>The floor item the chef is walking to (null if none or already carrying).</summary>
+    public Item CurrentTarget => currentState == AIState.MovingToItem ? currentTarget : null;
+    public bool IsCarrying => currentState == AIState.MovingToDeliveryPoint && currentTarget != null;
+    public Vector3 StartPosition => startPoint != null ? startPoint.position : transform.position;
+
     private void Awake()
     {
         stats = GetComponent<PlayerStats>();
@@ -170,6 +175,38 @@ public class PlayerAI : MonoBehaviour
         }
 
         return currentWaypoint >= currentPath.Count;
+    }
+
+    /// <summary>Instantly moves the chef to a position (use a cell center) and recalculates his path.</summary>
+    public void Teleport(Vector3 position)
+    {
+        transform.position = position;
+        Replan();
+    }
+
+    /// <summary>The chef drops the item he carries at a position and goes looking for an item again.</summary>
+    public void DropCarried(Vector3 position)
+    {
+        if (!IsCarrying) return;
+
+        currentTarget.Drop(position);
+        currentTarget = null;
+        Replan();
+    }
+
+    private void Replan()
+    {
+        currentWaypoint = 0;
+        if (!IsCarrying)
+        {
+            currentTarget = null;
+            currentPath.Clear();
+            currentState = AIState.FindingItem;
+            return;
+        }
+
+        PathCreator map = PathCreator.Active;
+        currentPath = FindPath(map, map.WorldToCell(transform.position), map.WorldToCell(deliveryPoint.position)) ?? new List<Vector3>();
     }
 
     private void HandleItemPositionChanged(Item item, Vector3 newPos)

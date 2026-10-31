@@ -13,5 +13,6 @@ MonoBehaviour:
   m_Name: TestItemData
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   itemName: Candy
-  itemPrefab: {fileID: 5029446185087693710, guid: c60b2397e96545f4b9f45d2c8c1c1c37, type: 3}
+  itemPrefab: {fileID: 6524227324159779235, guid: c60b2397e96545f4b9f45d2c8c1c1c37, type: 3}
   itemSprite: {fileID: -1492195101, guid: 78c52737b8052ec42afb10ff3abf0800, type: 3}
+  gatheredSprite: {fileID: -1492195101, guid: 78c52737b8052ec42afb10ff3abf0800, type: 3}
