@@ -10,138 +10,167 @@ using UnityEngine.Tilemaps;
 namespace aTES.EditorTools
 {
     /// <summary>
-    /// Builds the "Path" test scene from the user's concept sheets.
-    /// Each 256x256 sheet is sliced into a 16x16 grid of 16px sprites (Multiple mode). The sheets share one grid:
-    ///   floor sheet  -> Ground tilemap (any cell with pixels)
-    ///   wall sheets  -> Walls tilemap  (any cell with pixels = unwalkable)
-    /// Identical-looking cells share one Tile asset (Assets/Sprites/Tilemaps/Generated).
+    /// Builds 3 test levels under "Levels" in the "Path" scene using the user's sliced sprites:
+    /// - Level 1: Original 16x16 concept sheet layout.
+    /// - Level 2: 16x16 chamber/corridor layout with half-barriers and solid blocks.
+    /// - Level 3: 12x10 compact arena to test automatic bounds calculation on different map sizes.
     /// </summary>
     public static class PathTestSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/Path.unity";
+        private const string FloorSheet = "Assets/Sprites/bc conspt jem.png";
         private const string TileFolder = "Assets/Sprites/Tilemaps/Generated";
         private const int Cell = 16;
-        private const int Grid = 16;   // 16 x 16 cells per sheet
-
-        private const string FloorSheet = "bc conspt jem";
-        private const string InnerWallSheet = "duvarlar jem";
-
-        // A wall line counts as a barrier on a side when this many opaque pixels sit in that side's edge band.
-        private const int EdgeBand = 5;
+        private const int Size = 16;
         private const int EdgeMinPixels = 40;
+
+        // Legend for custom layouts:
+        // '#' = outer solid wall, '.' = floor, '^'/'v'/'<'/'>' = floor + half-barrier on Up/Down/Left/Right
+        private static readonly string[] Level2Map =
+        {
+            "################",
+            "#..............#",
+            "#..^^^^^^..vv..#",
+            "#..<....>......#",
+            "#..<....>..##..#",
+            "#..<....>..##..#",
+            "#..vvvvvv......#",
+            "#..............#",
+            "#....^^....^^..#",
+            "#...<..>..<..>.#",
+            "#...<..>..<..>.#",
+            "#....vv....vv..#",
+            "#..............#",
+            "#..>>>>..<<<<..#",
+            "#..............#",
+            "################",
+        };
+
+        private static readonly string[] Level3Map =
+        {
+            "############",
+            "#..........#",
+            "#..^^^^....#",
+            "#..<..>..#.#",
+            "#........#.#",
+            "#.#..vvvv..#",
+            "#.#........#",
+            "#....^^^^..#",
+            "#..........#",
+            "############",
+        };
 
         [MenuItem("Tools/aTES/Build Path Test Scene")]
         public static void Build()
         {
-            if (EditorSceneManager.GetActiveScene().path != ScenePath)
-            {
-                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-                EditorSceneManager.OpenScene(ScenePath);
-            }
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            EditorSceneManager.OpenScene(ScenePath);
 
-            string floorPath = FindSheet(f => f == FloorSheet);
-            string innerPath = FindSheet(f => f == InnerWallSheet);
-            string outerPath = FindSheet(f => f.EndsWith("duvarlar jem") && f != InnerWallSheet);
+            string[] walls = AssetDatabase.FindAssets("duvarlar jem t:Texture2D", new[] { "Assets/Sprites" }).Select(AssetDatabase.GUIDToAssetPath).ToArray();
+            string inner = walls.Single(p => p.EndsWith("/duvarlar jem.png"));
+            string outer = walls.Single(p => p != inner);
 
-            if (floorPath == null || innerPath == null || outerPath == null)
-            {
-                Debug.LogError("[PathTestSceneBuilder] Could not find all three sprite sheets in Assets/Sprites.");
-                return;
-            }
+            foreach (string sheet in new[] { FloorSheet, inner, outer }) Slice(sheet);
 
-            SliceSheet(floorPath);
-            SliceSheet(innerPath);
-            SliceSheet(outerPath);
-
-            // Remove the placeholder tiles from the previous version.
-            if (AssetDatabase.IsValidFolder("Assets/Sprites/PathTest")) AssetDatabase.DeleteAsset("Assets/Sprites/PathTest");
-
-            // Regenerate tiles from scratch so tile types (solid vs barrier) are always correct.
-            if (AssetDatabase.IsValidFolder(TileFolder)) AssetDatabase.DeleteAsset(TileFolder);
+            AssetDatabase.DeleteAsset(TileFolder);
             Directory.CreateDirectory(TileFolder);
             AssetDatabase.Refresh();
 
-            // Rebuild the scene objects.
-            GameObject old = GameObject.Find("Grid");
-            if (old != null) Object.DestroyImmediate(old);
+            Object.DestroyImmediate(GameObject.Find("Grid"));
+            Object.DestroyImmediate(GameObject.Find("Levels"));
 
-            GameObject gridObj = new GameObject("Grid");
-            gridObj.AddComponent<UnityEngine.Grid>();
-            Tilemap ground = CreateTilemap(gridObj.transform, "Ground", 0);
-            Tilemap walls = CreateTilemap(gridObj.transform, "Walls", 1);
+            GameObject levelsRoot = new GameObject("Levels");
+            LevelManager manager = levelsRoot.AddComponent<LevelManager>();
 
-            Paint(floorPath, ground, false);
-            Paint(outerPath, walls, false);   // outer ring: solid tiles (no ground under them anyway)
-            Paint(innerPath, walls, true);    // inner walls: barrier tiles (cell stays walkable, edges close)
+            // Level 1: painted directly from the 3 concept sheets.
+            (Tilemap ground1, Tilemap walls1) = NewLevel(levelsRoot.transform, "Level 1");
+            PaintSheet(FloorSheet, ground1, false);
+            PaintSheet(outer, walls1, false);
+            PaintSheet(inner, walls1, true);
+            ground1.GetComponentInParent<PathCreator>().ScanMap();
 
-            PathCreator creator = gridObj.AddComponent<PathCreator>();
-            SerializedObject so = new SerializedObject(creator);
-            so.FindProperty("groundTilemap").objectReferenceValue = ground;
-            so.FindProperty("obstacleTilemap").objectReferenceValue = walls;
-            so.ApplyModifiedPropertiesWithoutUndo();
-            creator.ScanMap();
+            // Reuse the generated tiles from Level 1 to paint Level 2 and Level 3.
+            TileBase[] floors = new[] { "bc conspt jem_1_1", "bc conspt jem_2_1", "bc conspt jem_3_1" }
+                .Select(n => AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{n}.asset")).ToArray();
+            TileBase solidWall = AssetDatabase.LoadAssetAtPath<TileBase>(
+                AssetDatabase.FindAssets("duvarlar t:Tile", new[] { TileFolder })
+                    .Select(AssetDatabase.GUIDToAssetPath)
+                    .First(p => !(AssetDatabase.LoadAssetAtPath<TileBase>(p) is BarrierTile)));
+            Dictionary<TileSides, TileBase> barrierBySide = AssetDatabase.FindAssets("t:BarrierTile", new[] { TileFolder })
+                .Select(g => AssetDatabase.LoadAssetAtPath<BarrierTile>(AssetDatabase.GUIDToAssetPath(g)))
+                .Where(b => b.BlockedSides != TileSides.None)
+                .GroupBy(b => b.BlockedSides)
+                .ToDictionary(g => g.Key, g => (TileBase)g.First());
+
+            BuildPatternLevel(levelsRoot.transform, "Level 2", Level2Map, floors, solidWall, barrierBySide);
+            BuildPatternLevel(levelsRoot.transform, "Level 3", Level3Map, floors, solidWall, barrierBySide);
+
+            manager.Show(0);
 
             GameObject player = GameObject.Find("Player");
-            if (player != null)
-            {
-                GameObjectUtility.RemoveMonoBehavioursWithMissingScript(player);
-                player.transform.position = ground.GetCellCenterWorld(CellFor(2, 2));
+            GameObjectUtility.RemoveMonoBehavioursWithMissingScript(player);
+            player.transform.position = ground1.GetCellCenterWorld(CellOf(2, 2, Size, Size));
+            if (!player.TryGetComponent(out PlayerMoveRays _)) player.AddComponent<PlayerMoveRays>();
 
-                PlayerMoveRays rays = player.GetComponent<PlayerMoveRays>();
-                if (rays == null) rays = player.AddComponent<PlayerMoveRays>();
-                SerializedObject rso = new SerializedObject(rays);
-                rso.FindProperty("pathCreator").objectReferenceValue = creator;
-                rso.ApplyModifiedPropertiesWithoutUndo();
-            }
-
-            Camera cam = Camera.main;
-            if (cam != null)
-            {
-                cam.orthographic = true;
-                cam.orthographicSize = Grid * 0.5f + 1f;
-                cam.transform.position = new Vector3(0.5f, 0.5f, -10f);
-            }
+            Camera.main.orthographicSize = Size / 2f + 1f;
+            Camera.main.transform.position = new Vector3(0f, 0f, -10f);
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
             EditorSceneManager.SaveScene(EditorSceneManager.GetActiveScene());
-
-            int walkable = creator.Cells.Count(c => c.walkable);
-            Debug.Log($"[PathTestSceneBuilder] Built from your sprites. Cells: {creator.Cells.Count}, walkable: {walkable}, unwalkable: {creator.Cells.Count - walkable}");
+            Debug.Log("[PathTestSceneBuilder] Built 3 test levels under 'Levels'.");
         }
 
-        /// <summary>Cell coordinate for a sheet cell (col, row from the top). Sheet is centred on the origin.</summary>
-        private static Vector3Int CellFor(int col, int rowFromTop)
+        private static (Tilemap ground, Tilemap walls) NewLevel(Transform parent, string name)
         {
-            return new Vector3Int(col - Grid / 2, (Grid - 1 - rowFromTop) - Grid / 2, 0);
+            GameObject level = new GameObject(name);
+            level.transform.SetParent(parent, false);
+            level.AddComponent<Grid>();
+            Tilemap ground = NewTilemap(level, "Ground", 0);
+            Tilemap walls = NewTilemap(level, "Walls", 1);
+            level.AddComponent<PathCreator>();
+            return (ground, walls);
         }
 
-        private static string FindSheet(System.Func<string, bool> match)
+        private static void BuildPatternLevel(
+            Transform parent,
+            string name,
+            string[] rows,
+            TileBase[] floors,
+            TileBase solidWall,
+            Dictionary<TileSides, TileBase> barriers)
         {
-            foreach (string guid in AssetDatabase.FindAssets("t:Texture2D", new[] { "Assets/Sprites" }))
+            (Tilemap ground, Tilemap walls) = NewLevel(parent, name);
+            int h = rows.Length, w = rows[0].Length;
+
+            for (int r = 0; r < h; r++)
             {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (path.Contains("/Tilemaps/")) continue;
-                if (match(Path.GetFileNameWithoutExtension(path))) return path;
+                for (int c = 0; c < w; c++)
+                {
+                    Vector3Int cell = CellOf(c, r, w, h);
+                    char ch = rows[r][c];
+                    if (ch == '#')
+                    {
+                        walls.SetTile(cell, solidWall);
+                        continue;
+                    }
+
+                    ground.SetTile(cell, floors[(c + r) % floors.Length]);
+                    TileSides side = ch == '^' ? TileSides.Up : ch == 'v' ? TileSides.Down : ch == '<' ? TileSides.Left : ch == '>' ? TileSides.Right : TileSides.None;
+                    if (side != TileSides.None && barriers.TryGetValue(side, out TileBase b)) walls.SetTile(cell, b);
+                }
             }
-            return null;
+
+            ground.GetComponentInParent<PathCreator>().ScanMap();
         }
 
-        /// <summary>Switches a sheet to Multiple and slices it into 16x16 sprites named "{sheet}_{col}_{row}" (row from top).</summary>
-        private static void SliceSheet(string path)
+        private static Vector3Int CellOf(int col, int row, int cols, int rows) => new Vector3Int(col - cols / 2, rows / 2 - 1 - row, 0);
+
+        private static void Slice(string path)
         {
             TextureImporter importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            string sheet = Path.GetFileNameWithoutExtension(path);
+            if (importer.spriteImportMode == SpriteImportMode.Multiple && AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().Count() == Size * Size) return;
 
-            bool alreadySliced = importer.spriteImportMode == SpriteImportMode.Multiple
-                                 && AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().Count() == Grid * Grid;
-            if (alreadySliced) return;
-
-            importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Multiple;
-            importer.spritePixelsPerUnit = Cell;
-            importer.filterMode = FilterMode.Point;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.mipmapEnabled = false;
             importer.SaveAndReimport();
 
             SpriteDataProviderFactories factory = new SpriteDataProviderFactories();
@@ -149,135 +178,98 @@ namespace aTES.EditorTools
             ISpriteEditorDataProvider provider = factory.GetSpriteEditorDataProviderFromObject(importer);
             provider.InitSpriteEditorDataProvider();
 
-            List<SpriteRect> rects = new List<SpriteRect>();
-            for (int row = 0; row < Grid; row++)
+            string sheet = Path.GetFileNameWithoutExtension(path);
+            SpriteRect[] rects = Enumerable.Range(0, Size * Size).Select(i => new SpriteRect
             {
-                for (int col = 0; col < Grid; col++)
-                {
-                    rects.Add(new SpriteRect
-                    {
-                        name = $"{sheet}_{col}_{row}",
-                        spriteID = GUID.Generate(),
-                        rect = new Rect(col * Cell, (Grid - 1 - row) * Cell, Cell, Cell),
-                        alignment = SpriteAlignment.Center,
-                        pivot = new Vector2(0.5f, 0.5f)
-                    });
-                }
-            }
+                name = $"{sheet}_{i % Size}_{i / Size}",
+                spriteID = GUID.Generate(),
+                rect = new Rect(i % Size * Cell, (Size - 1 - i / Size) * Cell, Cell, Cell),
+                alignment = SpriteAlignment.Center,
+                pivot = new Vector2(0.5f, 0.5f)
+            }).ToArray();
 
-            provider.SetSpriteRects(rects.ToArray());
-            ISpriteNameFileIdDataProvider names = provider.GetDataProvider<ISpriteNameFileIdDataProvider>();
-            names.SetNameFileIdPairs(rects.Select(r => new SpriteNameFileIdPair(r.name, r.spriteID)).ToList());
+            provider.SetSpriteRects(rects);
+            provider.GetDataProvider<ISpriteNameFileIdDataProvider>().SetNameFileIdPairs(rects.Select(r => new SpriteNameFileIdPair(r.name, r.spriteID)).ToList());
             provider.Apply();
-
             importer.SaveAndReimport();
         }
 
-        /// <summary>
-        /// Paints every non-empty 16x16 cell of a sheet onto a tilemap, sharing one Tile per unique cell image.
-        /// With barriers = true the tiles are <see cref="BarrierTile"/>s whose closed sides come from where the line sits in the cell.
-        /// </summary>
-        private static void Paint(string path, Tilemap target, bool barriers)
+        private static void PaintSheet(string path, Tilemap target, bool barriers)
         {
             string sheet = Path.GetFileNameWithoutExtension(path);
-
-            Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Texture2D tex = new Texture2D(2, 2);
             tex.LoadImage(File.ReadAllBytes(path));
-
             Dictionary<string, Sprite> sprites = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().ToDictionary(s => s.name);
-            Dictionary<ulong, TileBase> tilesByImage = new Dictionary<ulong, TileBase>();
+            Dictionary<int, TileBase> tiles = new Dictionary<int, TileBase>();
 
-            for (int row = 0; row < Grid; row++)
+            for (int i = 0; i < Size * Size; i++)
             {
-                for (int col = 0; col < Grid; col++)
+                int col = i % Size, row = i / Size;
+                Color[] px = tex.GetPixels(col * Cell, (Size - 1 - row) * Cell, Cell, Cell);
+                if (px.All(p => p.a < 0.08f)) continue;
+
+                System.HashCode hash = new System.HashCode();
+                foreach (Color p in px) hash.Add(p);
+
+                string name = $"{sheet}_{col}_{row}";
+                if (!tiles.TryGetValue(hash.ToHashCode(), out TileBase tile))
                 {
-                    Color[] raw = tex.GetPixels(col * Cell, (Grid - 1 - row) * Cell, Cell, Cell);
-                    Color32[] px = System.Array.ConvertAll(raw, c => (Color32)c);
-                    if (!px.Any(p => p.a > 20)) continue;
-
-                    ulong hash = Hash(px);
-                    if (!tilesByImage.TryGetValue(hash, out TileBase tile))
-                    {
-                        string spriteName = $"{sheet}_{col}_{row}";
-                        string assetPath = $"{TileFolder}/{spriteName}.asset";
-                        tile = barriers
-                            ? CreateTile<BarrierTile>(assetPath, sprites[spriteName], t => t.blockedSides = DetectSides(raw))
-                            : CreateTile<Tile>(assetPath, sprites[spriteName], null);
-                        tilesByImage[hash] = tile;
-                    }
-
-                    target.SetTile(CellFor(col, row), tile);
+                    tile = NewTile($"{TileFolder}/{name}.asset", sprites[name], barriers ? px : null);
+                    tiles[hash.ToHashCode()] = tile;
                 }
+
+                target.SetTile(CellOf(col, row, Size, Size), tile);
             }
 
             Object.DestroyImmediate(tex);
             AssetDatabase.SaveAssets();
         }
 
-        /// <summary>Which edges of the cell carry a wall line (pixels are bottom-left origin, so y = 0 is the bottom).</summary>
-        private static TileSides DetectSides(Color[] raw)
+        private static TileBase NewTile(string path, Sprite sprite, Color[] barrierPixels)
         {
-            int up = 0, down = 0, left = 0, right = 0;
-            for (int y = 0; y < Cell; y++)
-            {
-                for (int x = 0; x < Cell; x++)
-                {
-                    if (raw[y * Cell + x].a <= 20f / 255f) continue;
-                    if (y >= Cell - EdgeBand) up++;
-                    if (y < EdgeBand) down++;
-                    if (x < EdgeBand) left++;
-                    if (x >= Cell - EdgeBand) right++;
-                }
-            }
-
-            TileSides sides = TileSides.None;
-            if (up >= EdgeMinPixels) sides |= TileSides.Up;
-            if (down >= EdgeMinPixels) sides |= TileSides.Down;
-            if (left >= EdgeMinPixels) sides |= TileSides.Left;
-            if (right >= EdgeMinPixels) sides |= TileSides.Right;
-            return sides;
-        }
-
-        private static T CreateTile<T>(string assetPath, Sprite sprite, System.Action<T> setup) where T : Tile
-        {
-            T tile = ScriptableObject.CreateInstance<T>();
+            Tile tile = barrierPixels != null ? ScriptableObject.CreateInstance<BarrierTile>() : ScriptableObject.CreateInstance<Tile>();
             tile.sprite = sprite;
             tile.colliderType = Tile.ColliderType.None;
-            setup?.Invoke(tile);
-            AssetDatabase.CreateAsset(tile, assetPath);
+
+            if (barrierPixels != null)
+            {
+                SerializedObject so = new SerializedObject(tile);
+                so.FindProperty("blockedSides").intValue = (int)DetectSides(barrierPixels);
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            AssetDatabase.CreateAsset(tile, path);
             return tile;
         }
 
-        private static ulong Hash(Color32[] px)
+        private static TileSides DetectSides(Color[] px)
         {
-            ulong h = 1469598103934665603UL;
-            foreach (Color32 c in px)
+            TileSides sides = TileSides.None;
+            for (int i = 0; i < 4; i++)
             {
-                bool clear = c.a == 0;
-                h = (h ^ (clear ? 0u : c.r)) * 1099511628211UL;
-                h = (h ^ (clear ? 0u : c.g)) * 1099511628211UL;
-                h = (h ^ (clear ? 0u : c.b)) * 1099511628211UL;
-                h = (h ^ c.a) * 1099511628211UL;
+                Vector3Int d = Sides.Dir[i];
+                int count = px.Where((p, k) => p.a >= 0.08f && d.x * (k % Cell - 7.5f) + d.y * (k / Cell - 7.5f) > 2.5f).Count();
+                if (count >= EdgeMinPixels) sides |= (TileSides)(1 << i);
             }
-            return h;
+            return sides;
         }
 
-        private static Tilemap CreateTilemap(Transform parent, string name, int order)
+        private static Tilemap NewTilemap(GameObject parent, string name, int order)
         {
             GameObject go = new GameObject(name);
-            go.transform.SetParent(parent, false);
+            go.transform.SetParent(parent.transform, false);
             Tilemap tm = go.AddComponent<Tilemap>();
             go.AddComponent<TilemapRenderer>().sortingOrder = order;
             return tm;
         }
 
         [InitializeOnLoadMethod]
-        private static void AutoRun()
+        private static void AutoRunOnce()
         {
             EditorApplication.delayCall += () =>
             {
-                if (SessionState.GetBool("aTES_PathBuilt_v4", false)) return;
-                SessionState.SetBool("aTES_PathBuilt_v4", true);
+                if (SessionState.GetBool("aTES_3LevelsBuilt_v2", false)) return;
+                SessionState.SetBool("aTES_3LevelsBuilt_v2", true);
                 Build();
             };
         }
