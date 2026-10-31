@@ -2,42 +2,20 @@ using UnityEngine;
 
 namespace aTES
 {
-    /// <summary>
-    /// Debug visual: draws a ray from the player to each of the 4 neighbouring cell centers.
-    /// Green = the player can move there, red = blocked. Uses the grid built by <see cref="PathCreator"/>.
-    /// Visible in the Scene view, and in the Game view when the Gizmos toggle is on.
-    /// </summary>
-    [ExecuteAlways]
+    /// <summary>Debug gizmo: a ray from the player to each neighbouring cell center. Green = can move there, red = blocked.</summary>
     public class PlayerMoveRays : MonoBehaviour
     {
-        [SerializeField] private PathCreator pathCreator;
-
-        private static readonly Vector3Int[] Directions =
-        {
-            Vector3Int.up, Vector3Int.down, Vector3Int.left, Vector3Int.right
-        };
-
         private void OnDrawGizmos()
         {
-            if (pathCreator == null)
+            PathCreator map = PathCreator.Active;
+            if (map == null) return;
+
+            Vector3Int cell = map.WorldToCell(transform.position);
+            foreach (Vector3Int dir in Sides.Dir)
             {
-                return;
-            }
-
-            Vector3 origin = transform.position;
-            Vector3Int currentCell = pathCreator.WorldToCell(origin);
-
-            Gizmos.color = Color.white;
-            Gizmos.DrawWireSphere(pathCreator.CellToWorldCenter(currentCell), 0.15f);
-
-            for (int i = 0; i < Directions.Length; i++)
-            {
-                Vector3Int neighbour = currentCell + Directions[i];
-                Vector3 end = pathCreator.CellToWorldCenter(neighbour);
-
-                Gizmos.color = pathCreator.CanMove(currentCell, neighbour) ? Color.green : Color.red;
-                Gizmos.DrawLine(origin, end);
-                Gizmos.DrawSphere(end, 0.12f);
+                Gizmos.color = map.CanMove(cell, cell + dir) ? Color.green : Color.red;
+                Gizmos.DrawLine(transform.position, map.CellToWorldCenter(cell + dir));
+                Gizmos.DrawSphere(map.CellToWorldCenter(cell + dir), 0.12f);
             }
         }
     }

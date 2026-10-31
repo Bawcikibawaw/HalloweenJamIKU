@@ -4,7 +4,6 @@ using UnityEngine.Tilemaps;
 
 namespace aTES
 {
-    /// <summary>Sides of a cell. Up = +Y, Right = +X.</summary>
     [Flags]
     public enum TileSides
     {
@@ -15,14 +14,21 @@ namespace aTES
         Right = 8
     }
 
+    /// <summary>Direction of each <see cref="TileSides"/> bit: bit i is Dir[i], and the opposite side is bit (i ^ 1).</summary>
+    public static class Sides
+    {
+        public static readonly Vector3Int[] Dir = { Vector3Int.up, Vector3Int.down, Vector3Int.left, Vector3Int.right };
+    }
+
     /// <summary>
-    /// A wall tile that does NOT make its cell unwalkable (when it sits on a ground tile).
-    /// It only blocks movement across the ticked sides, e.g. a half barrier along the top of a cell.
-    /// Put these on the obstacle tilemap. Plain tiles there still make the whole cell unwalkable.
+    /// Wall tile that keeps its cell walkable and only closes the ticked sides (e.g. a half barrier).
+    /// Place it on the obstacle tilemap, over a ground tile. Any other tile there makes the cell unwalkable.
     /// </summary>
     [CreateAssetMenu(menuName = "aTES/Barrier Tile")]
     public class BarrierTile : Tile
     {
-        public TileSides blockedSides;
+        [SerializeField] private TileSides blockedSides;
+
+        public TileSides BlockedSides => blockedSides;
     }
 }
