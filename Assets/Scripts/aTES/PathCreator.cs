@@ -84,6 +84,47 @@ namespace aTES
                     floor && (wall == null || barrier != null),
                     barrier != null ? barrier.BlockedSides : TileSides.None);
             }
+
+            // Mark enclosed pockets (floor cells cut off by inner walls) as unwalkable so gizmos and AI treat them as blocked.
+            HashSet<Vector3Int> mainRegion = GetMainWalkableRegion();
+            foreach (Vector3Int cell in new List<Vector3Int>(_cells.Keys))
+            {
+                GridCell c = _cells[cell];
+                if (c.walkable && !mainRegion.Contains(cell))
+                    _cells[cell] = new GridCell(c.center, false, c.blockedSides);
+            }
+        }
+
+        private HashSet<Vector3Int> GetMainWalkableRegion()
+        {
+            HashSet<Vector3Int> visited = new();
+            HashSet<Vector3Int> best = new();
+            Queue<Vector3Int> queue = new();
+
+            foreach (KeyValuePair<Vector3Int, GridCell> kv in _cells)
+            {
+                if (!kv.Value.walkable || !visited.Add(kv.Key)) continue;
+
+                HashSet<Vector3Int> region = new() { kv.Key };
+                queue.Enqueue(kv.Key);
+                while (queue.Count > 0)
+                {
+                    Vector3Int cur = queue.Dequeue();
+                    foreach (Vector3Int dir in Sides.Dir)
+                    {
+                        Vector3Int next = cur + dir;
+                        if (CanMove(cur, next) && visited.Add(next))
+                        {
+                            region.Add(next);
+                            queue.Enqueue(next);
+                        }
+                    }
+                }
+
+                if (region.Count > best.Count) best = region;
+            }
+
+            return best;
         }
 
         public Vector3Int WorldToCell(Vector3 worldPosition) => groundTilemap.WorldToCell(worldPosition);
@@ -91,6 +132,12 @@ namespace aTES
         public Vector3 CellToWorldCenter(Vector3Int cell) => groundTilemap.GetCellCenterWorld(cell);
 
         public bool IsWalkable(Vector3Int cell) => _cells.TryGetValue(cell, out GridCell c) && c.walkable;
+
+        public void SetWalkable(Vector3Int cell, bool walkable)
+        {
+            if (_cells.TryGetValue(cell, out GridCell c))
+                _cells[cell] = new GridCell(c.center, walkable, c.blockedSides);
+        }
 
         /// <summary>True if both neighbouring cells are walkable and no barrier closes the edge between them.</summary>
         public bool CanMove(Vector3Int from, Vector3Int to)

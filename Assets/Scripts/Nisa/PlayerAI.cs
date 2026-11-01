@@ -25,6 +25,7 @@ public class PlayerAI : MonoBehaviour
     public bool IsCarrying => currentState == AIState.MovingToDeliveryPoint && currentTarget != null;
     public Vector3 StartPosition => startPoint != null ? startPoint.position : transform.position;
     public Vector3 DeliveryPosition => deliveryPoint != null ? deliveryPoint.position : transform.position;
+    public Vector3? NextStep => currentWaypoint < currentPath.Count ? currentPath[currentWaypoint] : null;
 
     private void Awake()
     {
@@ -89,6 +90,10 @@ public class PlayerAI : MonoBehaviour
             case AIState.FindingItem: FindNextItem(); break;
             case AIState.MovingToItem: MoveToItem(); break;
             case AIState.MovingToDeliveryPoint: MoveToDeliveryPoint(); break;
+            case AIState.Finished:
+                if (ItemManager.Instance != null && ItemManager.Instance.ActiveItems.Count > 0)
+                    FindNextItem();
+                break;
         }
     }
 
@@ -106,7 +111,7 @@ public class PlayerAI : MonoBehaviour
 
         foreach (KeyValuePair<Item, Vector3> entry in ItemManager.Instance.ActiveItems)
         {
-            if (entry.Key == null || entry.Key.IsCollected) continue;
+            if (entry.Key == null || entry.Key.IsCollected || entry.Key.IsBeingDragged) continue;
 
             Vector3Int itemCell = map.WorldToCell(entry.Value);
             List<Vector3> toItem = FindPath(map, startCell, itemCell);
@@ -128,7 +133,7 @@ public class PlayerAI : MonoBehaviour
 
     private void MoveToItem()
     {
-        if (currentTarget == null)
+        if (currentTarget == null || currentTarget.IsBeingDragged)
         {
             currentState = AIState.FindingItem;
             return;
@@ -209,7 +214,7 @@ public class PlayerAI : MonoBehaviour
 
         foreach (KeyValuePair<Item, Vector3> entry in ItemManager.Instance.ActiveItems)
         {
-            if (entry.Key == null || entry.Key.IsCollected) continue;
+            if (entry.Key == null || entry.Key.IsCollected || entry.Key.IsBeingDragged) continue;
 
             List<Vector3> toItem = FindPath(map, startCell, map.WorldToCell(entry.Value));
             if (toItem != null && toItem.Count > longest)
@@ -229,7 +234,7 @@ public class PlayerAI : MonoBehaviour
         return true;
     }
 
-    private void Replan()
+    public void Replan()
     {
         currentWaypoint = 0;
         if (!IsCarrying)

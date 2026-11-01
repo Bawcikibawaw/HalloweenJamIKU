@@ -23,60 +23,208 @@ namespace aTES.EditorTools
     /// </summary>
     public static class PathTestSceneBuilder
     {
-        private const string FloorSheet = "Assets/Sprites/bc conspt jem.png";
+        private const string NewTilemapFolder = "Assets/Sprites/New Tilemaps";
+        private const string FloorSheet = "Assets/Sprites/New Tilemaps/GAME BC 1.png";
+        private const string CharsSheet = "Assets/Sprites/chars.png";
         private const string TileFolder = "Assets/Sprites/Tilemaps/Generated";
-        private const int Cell = 16;
-        private const int Size = 16;
-        private const int EdgeMinPixels = 40;
+        private const int Cell = 32;
+        private const int Size = 18;
+        private const int InnerSize = 16;
 
-        private static readonly string[] Level2Walls =
+        // 9 Levels (16x16 interior grids inside the 18x18 outer wall frame):
+        // Level 1 = Sketch 3 (GAME map 1), Level 2 = Sketch 1, Level 3 = Sketch 2 (Heart), Levels 4-9 = Custom Mazes
+        private static readonly string[][] Levels =
         {
-            "................",
-            "................",
-            "..1DDDDDDDDDD2..",
-            "..R..........L..",
-            "..R..1DDDD...L..",
-            "..R..R.......L..",
-            "..R..3UUUUUUU4..",
-            "..R.............",
-            "..R..1DDDDDDD2..",
-            "..R..R.......L..",
-            "..R..3UUUU...L..",
-            "..R..........L..",
-            "..3UUUUUUU...L..",
-            ".............L..",
-            "...UUUUUUUUUU4..",
-            "................",
-        };
-
-        private static readonly string[] Level3Walls =
-        {
-            "................",
-            "................",
-            "..1DDDD2..1DD2..",
-            "..R....L..R..L..",
-            "..R....L..R..L..",
-            "..3U..U4..3U.L..",
-            ".............L..",
-            "..1DDDDDDDD..L..",
-            "..R..........L..",
-            "..R..1DDDD2..L..",
-            "..R..R....L..L..",
-            "..R..3U..U4..L..",
-            "..R..........L..",
-            "..3UUUUUU....L..",
-            "........UUUUU4..",
-            "................",
+            // Level 1 (Sketch 3 / GAME map 1)
+            new[]
+            {
+                "........##.#....",
+                ".####.#....#.###",
+                "....#...#..#.#..",
+                ".##.#..##.......",
+                "............###.",
+                "##.#.######.#...",
+                "###..#....#.#.##",
+                ".......##...#...",
+                ".###...##......#",
+                ".....#....#.####",
+                ".#...######.#..#",
+                ".#..............",
+                ".#.##.###.#..###",
+                ".#........#.....",
+                ".########.#.##..",
+                "...............#",
+            },
+            // Level 2 (Sketch 1 - Scattered Blocks)
+            new[]
+            {
+                "..##.....###..#.",
+                "..##.####.....#.",
+                "..##....#.####.#",
+                "..##......####.#",
+                "..##..#.......##",
+                ".....##..###....",
+                ".....##..###.##.",
+                ".##........#.###",
+                ".##..###......##",
+                ".........####...",
+                ".####..........#",
+                ".####.....###.##",
+                "..........##....",
+                ".##....##.##.###",
+                ".#..#..##.##.###",
+                "...##.....##....",
+            },
+            // Level 3 (Sketch 2 - The Cursed Heart)
+            new[]
+            {
+                "...#####........",
+                ".##....#.#.#.##.",
+                ".#..###..#...#..",
+                "..............##",
+                "..#..##...##....",
+                "#.##.###.###.###",
+                "#.....#####.....",
+                "#..###.###...###",
+                "#.......#....#..",
+                "...#.#......###.",
+                "##.###....#.....",
+                "##.....#......##",
+                "....####.#.####.",
+                ".#.....#.#.#..#.",
+                ".##..##....#.##.",
+                "........##......",
+            },
+            // Level 4 (Double Spiral Labyrinth)
+            new[]
+            {
+                "................",
+                ".######..######.",
+                ".#............#.",
+                ".#.####..####.#.",
+                ".#.#........#.#.",
+                ".#.#.##..##.#.#.",
+                ".#.#.#....#.#.#.",
+                "...#.#.##.#.#...",
+                "...#.#.##.#.#...",
+                ".#.#.#....#.#.#.",
+                ".#.#.##..##.#.#.",
+                ".#.#........#.#.",
+                ".#.####..####.#.",
+                ".#............#.",
+                ".######..######.",
+                "................",
+            },
+            // Level 5 (The Skull Chamber)
+            new[]
+            {
+                "..###......###..",
+                ".#............#.",
+                ".#...######...#.",
+                "...#########....",
+                ".#.###.##.###.#.",
+                ".#.###.##.###.#.",
+                ".#...######...#.",
+                ".....#.##.#.....",
+                ".###...##...###.",
+                ".#............#.",
+                ".#.###.##.###.#.",
+                "...#...##...#...",
+                ".###.######.###.",
+                ".#............#.",
+                "..####....####..",
+                "................",
+            },
+            // Level 6 (Crossroad Citadel)
+            new[]
+            {
+                "...#........#...",
+                ".###.######.###.",
+                ".#.....##.....#.",
+                ".#.###.##.###.#.",
+                "...#........#...",
+                ".###.##..##.###.",
+                ".....##..##.....",
+                ".###........###.",
+                ".###........###.",
+                ".....##..##.....",
+                ".###.##..##.###.",
+                "...#........#...",
+                ".#.###.##.###.#.",
+                ".#.....##.....#.",
+                ".###.######.###.",
+                "...#........#...",
+            },
+            // Level 7 (The Hourglass)
+            new[]
+            {
+                "..############..",
+                "................",
+                ".##.########.##.",
+                ".##..######..##.",
+                ".#....####....#.",
+                ".#.....##.....#.",
+                "...##......##...",
+                ".####..##..####.",
+                ".####..##..####.",
+                "...##......##...",
+                ".#.....##.....#.",
+                ".#....####....#.",
+                ".##..######..##.",
+                ".##.########.##.",
+                "................",
+                "..############..",
+            },
+            // Level 8 (Serpent Columns)
+            new[]
+            {
+                "................",
+                ".##..##..##..##.",
+                ".##..##..##..##.",
+                ".....##......##.",
+                ".##..##..##..##.",
+                ".##......##.....",
+                ".##..##..##..##.",
+                ".##..##..##..##.",
+                ".....##......##.",
+                ".##..##..##..##.",
+                ".##......##.....",
+                ".##..##..##..##.",
+                ".....##......##.",
+                ".##..##..##..##.",
+                ".##..##..##..##.",
+                "................",
+            },
+            // Level 9 (False God's Altar)
+            new[]
+            {
+                "..###..##..###..",
+                ".#.....##.....#.",
+                ".#.###....###.#.",
+                ".#.#.##..##.#.#.",
+                "...#.#....#.#...",
+                ".###.#.##.#.###.",
+                ".....#.##.#.....",
+                ".#####....#####.",
+                ".#####....#####.",
+                ".....#.##.#.....",
+                ".###.#.##.#.###.",
+                "...#.#....#.#...",
+                ".#.#.##..##.#.#.",
+                ".#.###....###.#.",
+                ".#.....##.....#.",
+                "..###..##..###..",
+            },
         };
 
         [MenuItem("Tools/aTES/Build Path Test Scene")]
         public static void Build()
         {
-            string[] walls = AssetDatabase.FindAssets("duvarlar jem t:Texture2D", new[] { "Assets/Sprites" }).Select(AssetDatabase.GUIDToAssetPath).ToArray();
-            string inner = walls.Single(p => p.EndsWith("/duvarlar jem.png"));
-            string outer = walls.Single(p => p != inner);
+            string[] newTexPaths = AssetDatabase.FindAssets("t:Texture2D", new[] { NewTilemapFolder }).Select(AssetDatabase.GUIDToAssetPath).ToArray();
+            string outer = newTexPaths.First(p => Path.GetFileName(p).StartsWith("GAME d"));
+            string innerAtlas = newTexPaths.First(p => Path.GetFileName(p).EndsWith("tile map.png"));
 
-            foreach (string sheet in new[] { FloorSheet, inner, outer }) Slice(sheet);
+            foreach (string sheet in new[] { FloorSheet, outer }) Slice(sheet);
 
             AssetDatabase.DeleteAsset(TileFolder);
             Directory.CreateDirectory(TileFolder);
@@ -89,40 +237,30 @@ namespace aTES.EditorTools
                 if (old != null) Object.DestroyImmediate(old);
             }
 
-            // 1. Levels + LevelManager + PathCreator
+            // 1. Levels + LevelManager + PathCreator (9 levels using New Tilemaps)
             GameObject levelsRoot = new GameObject("Levels");
             LevelManager levelManager = levelsRoot.AddComponent<LevelManager>();
 
-            (Tilemap ground1, Tilemap walls1) = NewBaseLevel(levelsRoot.transform, "Level 1", outer);
-            PaintSheet(inner, walls1, true);
-            ground1.GetComponentInParent<PathCreator>().ScanMap();
+            Dictionary<int, TileBase> innerTiles = BuildInnerWallTiles(innerAtlas);
+            Tilemap ground1 = null;
 
-            Dictionary<char, TileBase> innerTiles = new Dictionary<char, TileBase>
+            for (int i = 0; i < Levels.Length; i++)
             {
-                ['U'] = LoadTile("duvarlar jem_6_4"),
-                ['D'] = LoadTile("duvarlar jem_4_2"),
-                ['L'] = LoadTile("duvarlar jem_12_3"),
-                ['R'] = LoadTile("duvarlar jem_3_3"),
-                ['1'] = LoadTile("duvarlar jem_3_2"),
-                ['2'] = LoadTile("duvarlar jem_12_2"),
-                ['3'] = LoadTile("duvarlar jem_3_6"),
-                ['4'] = LoadTile("duvarlar jem_10_6"),
-            };
-
-            BuildCustomLevel(levelsRoot.transform, "Level 2", outer, Level2Walls, innerTiles);
-            BuildCustomLevel(levelsRoot.transform, "Level 3", outer, Level3Walls, innerTiles);
+                Tilemap g = BuildCustomLevel(levelsRoot.transform, $"Level {i + 1}", outer, Levels[i], innerTiles);
+                if (i == 0) ground1 = g;
+            }
             levelManager.Show(0);
 
             // 2. Start & Delivery Points
-            Vector3 startWorld = ground1.GetCellCenterWorld(CellOf(2, 2));
-            Vector3 deliveryWorld = ground1.GetCellCenterWorld(CellOf(1, 13));
+            Vector3 startWorld = ground1.GetCellCenterWorld(CellOf(1, 1));
+            Vector3 deliveryWorld = ground1.GetCellCenterWorld(CellOf(1, 16));
 
             GameObject startPointObj = new GameObject("PlayerStartPoint");
             startPointObj.transform.position = startWorld;
 
             GameObject deliveryPointObj = new GameObject("DeliveryPoint");
             deliveryPointObj.transform.position = deliveryWorld;
-            Sprite baseSprite = AssetDatabase.LoadAllAssetsAtPath(FloorSheet).OfType<Sprite>().First();
+            Sprite baseSprite = AssetDatabase.LoadAllAssetsAtPath(FloorSheet).OfType<Sprite>().First(s => s.name.EndsWith("_1_1"));
             SpriteRenderer deliveryRenderer = deliveryPointObj.AddComponent<SpriteRenderer>();
             deliveryRenderer.sprite = baseSprite;
             deliveryRenderer.color = new Color(0.2f, 0.9f, 1f, 0.85f);
@@ -154,17 +292,21 @@ namespace aTES.EditorTools
             if (!player.TryGetComponent(out PlayerStats _)) player.AddComponent<PlayerStats>();
             if (!player.TryGetComponent(out PlayerAI _)) player.AddComponent<PlayerAI>();
 
-            // 4. Item Prefab + ItemData + ItemManager
-            ItemData itemData = CreateItemAssets(baseSprite);
+            // 4. Item Prefab + ItemData (from chars.png) + ItemManager
+            List<ItemData> itemDatas = CreateItemAssets(baseSprite);
             GameObject itemManagerObj = new GameObject("ItemManager");
             ItemManager itemManager = itemManagerObj.AddComponent<ItemManager>();
 
             SerializedObject imSO = new SerializedObject(itemManager);
+            imSO.FindProperty("itemsPerLevel").intValue = 5;
             SerializedProperty entries = imSO.FindProperty("spawnEntries");
             entries.ClearArray();
-            entries.InsertArrayElementAtIndex(0);
-            entries.GetArrayElementAtIndex(0).FindPropertyRelative("itemData").objectReferenceValue = itemData;
-            entries.GetArrayElementAtIndex(0).FindPropertyRelative("amount").intValue = 5;
+            for (int i = 0; i < itemDatas.Count; i++)
+            {
+                entries.InsertArrayElementAtIndex(i);
+                entries.GetArrayElementAtIndex(i).FindPropertyRelative("itemData").objectReferenceValue = itemDatas[i];
+                entries.GetArrayElementAtIndex(i).FindPropertyRelative("amount").intValue = 1;
+            }
             imSO.ApplyModifiedPropertiesWithoutUndo();
 
             // 5. GameTimer + UI Canvas (False God top-left, 15 Skill Boxes in grid below it, 5 Ingredient Boxes bottom-left)
@@ -175,9 +317,9 @@ namespace aTES.EditorTools
             {
                 Camera.main.clearFlags = CameraClearFlags.SolidColor;
                 Camera.main.backgroundColor = Color.black;
-                Camera.main.orthographicSize = 8.6f;
+                Camera.main.orthographicSize = 9.6f;
                 float h = Camera.main.orthographicSize;
-                Camera.main.transform.position = new Vector3(9.8f - h * Camera.main.aspect, -7.7f + h, -10f);
+                Camera.main.transform.position = new Vector3(10.8f - h * Camera.main.aspect, -8.7f + h, -10f);
             }
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
@@ -188,15 +330,22 @@ namespace aTES.EditorTools
             Debug.Log($"[PathTestSceneBuilder] Built full system test in scene '{EditorSceneManager.GetActiveScene().name}'.");
         }
 
-        private static ItemData CreateItemAssets(Sprite sprite)
+        private static List<ItemData> CreateItemAssets(Sprite fallbackSprite)
         {
+            Sprite[] charSprites = AssetDatabase.LoadAllAssetsAtPath(CharsSheet)
+                .OfType<Sprite>()
+                .OrderBy(s => s.name)
+                .ToArray();
+
+            if (charSprites.Length == 0)
+                charSprites = new[] { fallbackSprite };
+
             string prefabPath = $"{TileFolder}/TestItem.prefab";
-            string dataPath = $"{TileFolder}/TestItemData.asset";
 
             GameObject temp = new GameObject("TestItem");
             SpriteRenderer sr = temp.AddComponent<SpriteRenderer>();
-            sr.sprite = sprite;
-            sr.color = new Color(1f, 0.85f, 0.1f, 1f);
+            sr.sprite = charSprites[0];
+            sr.color = Color.white;
             sr.sortingOrder = 4;
             temp.transform.localScale = Vector3.one * 0.5f;
             CircleCollider2D col = temp.AddComponent<CircleCollider2D>();
@@ -206,14 +355,20 @@ namespace aTES.EditorTools
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(temp, prefabPath);
             Object.DestroyImmediate(temp);
 
-            ItemData data = ScriptableObject.CreateInstance<ItemData>();
-            data.itemName = "Candy";
-            data.itemPrefab = prefab;
-            data.itemSprite = sprite;
-            data.gatheredSprite = sprite;
-            AssetDatabase.CreateAsset(data, dataPath);
+            List<ItemData> result = new List<ItemData>();
+            for (int i = 0; i < charSprites.Length; i++)
+            {
+                ItemData data = ScriptableObject.CreateInstance<ItemData>();
+                data.itemName = charSprites[i].name;
+                data.itemPrefab = prefab;
+                data.itemSprite = charSprites[i];
+                data.gatheredSprite = charSprites[i];
+                AssetDatabase.CreateAsset(data, $"{TileFolder}/Ingredient_{i:00}.asset");
+                result.Add(data);
+            }
+
             AssetDatabase.SaveAssets();
-            return data;
+            return result;
         }
 
         private static void SetupGameUI(Sprite placeholderSprite)
@@ -298,7 +453,6 @@ namespace aTES.EditorTools
                 logoRt.offsetMin = new Vector2(10f, 10f);
                 logoRt.offsetMax = new Vector2(-10f, -10f);
                 Image logoImg = logo.AddComponent<Image>();
-                logoImg.sprite = placeholderSprite;
                 logoImg.color = new Color(0.85f, 0.75f, 0.35f, 0.9f);
                 logoImg.preserveAspect = true;
                 logoImg.raycastTarget = false;
@@ -348,7 +502,6 @@ namespace aTES.EditorTools
             popupLogoRt.anchoredPosition = new Vector2(0f, -20f);
             popupLogoRt.sizeDelta = new Vector2(140f, 140f);
             Image popupLogoImg = popupLogoObj.AddComponent<Image>();
-            popupLogoImg.sprite = placeholderSprite;
             popupLogoImg.color = new Color(0.85f, 0.75f, 0.35f, 0.9f);
             popupLogoImg.preserveAspect = true;
 
@@ -591,7 +744,38 @@ namespace aTES.EditorTools
             return tmp;
         }
 
-        private static TileBase LoadTile(string name) => AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{name}.asset");
+        private static Dictionary<int, TileBase> BuildInnerWallTiles(string atlasPath)
+        {
+            Texture2D tex = new Texture2D(2, 2);
+            tex.LoadImage(File.ReadAllBytes(atlasPath));
+
+            Sprite[] sprites = AssetDatabase.LoadAllAssetsAtPath(atlasPath).OfType<Sprite>().ToArray();
+            Dictionary<int, TileBase> result = new Dictionary<int, TileBase>();
+
+            foreach (Sprite s in sprites)
+            {
+                Rect r = s.rect;
+                int rx = Mathf.RoundToInt(r.x);
+                int ry = Mathf.RoundToInt(r.y);
+
+                if (tex.GetPixel(rx + 16, ry + 16).a < 0.5f) continue;
+
+                bool topBorder = tex.GetPixel(rx + 16, ry + 30).r < 0.35f;
+                bool bottomBorder = tex.GetPixel(rx + 16, ry + 1).r < 0.35f;
+                bool leftBorder = tex.GetPixel(rx + 1, ry + 16).r < 0.35f;
+                bool rightBorder = tex.GetPixel(rx + 30, ry + 16).r < 0.35f;
+
+                int mask = (topBorder ? 1 : 0) | (bottomBorder ? 2 : 0) | (leftBorder ? 4 : 0) | (rightBorder ? 8 : 0);
+                if (!result.ContainsKey(mask))
+                {
+                    result[mask] = NewTile($"{TileFolder}/InnerWall_{mask:00}.asset", s);
+                }
+            }
+
+            Object.DestroyImmediate(tex);
+            AssetDatabase.SaveAssets();
+            return result;
+        }
 
         private static (Tilemap ground, Tilemap walls) NewBaseLevel(Transform parent, string name, string outerPath)
         {
@@ -602,25 +786,34 @@ namespace aTES.EditorTools
             Tilemap walls = NewTilemap(level, "Walls", 1);
             level.AddComponent<PathCreator>();
 
-            PaintSheet(FloorSheet, ground, false);
-            PaintSheet(outerPath, walls, false);
+            PaintSheet(FloorSheet, ground);
+            PaintSheet(outerPath, walls);
             return (ground, walls);
         }
 
-        private static void BuildCustomLevel(Transform parent, string name, string outerPath, string[] layout, Dictionary<char, TileBase> tiles)
+        private static Tilemap BuildCustomLevel(Transform parent, string name, string outerPath, string[] layout, Dictionary<int, TileBase> innerTiles)
         {
             (Tilemap ground, Tilemap walls) = NewBaseLevel(parent, name, outerPath);
-            for (int r = 0; r < Size; r++)
+            for (int r = 0; r < InnerSize; r++)
             {
-                for (int c = 0; c < Size; c++)
+                for (int c = 0; c < InnerSize; c++)
                 {
-                    if (tiles.TryGetValue(layout[r][c], out TileBase tile))
+                    if (layout[r][c] != '#') continue;
+
+                    bool hasUp = r > 0 && layout[r - 1][c] == '#';
+                    bool hasDown = r < InnerSize - 1 && layout[r + 1][c] == '#';
+                    bool hasLeft = c > 0 && layout[r][c - 1] == '#';
+                    bool hasRight = c < InnerSize - 1 && layout[r][c + 1] == '#';
+
+                    int borderMask = (!hasUp ? 1 : 0) | (!hasDown ? 2 : 0) | (!hasLeft ? 4 : 0) | (!hasRight ? 8 : 0);
+                    if (innerTiles.TryGetValue(borderMask, out TileBase tile))
                     {
-                        walls.SetTile(CellOf(c, r), tile);
+                        walls.SetTile(CellOf(c + 1, r + 1), tile);
                     }
                 }
             }
             ground.GetComponentInParent<PathCreator>().ScanMap();
+            return ground;
         }
 
         private static Vector3Int CellOf(int col, int row) => new Vector3Int(col - Size / 2, Size / 2 - 1 - row, 0);
@@ -628,9 +821,14 @@ namespace aTES.EditorTools
         private static void Slice(string path)
         {
             TextureImporter importer = (TextureImporter)AssetImporter.GetAtPath(path);
-            if (importer.spriteImportMode == SpriteImportMode.Multiple && AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().Count() == Size * Size) return;
+            if (importer.spriteImportMode == SpriteImportMode.Multiple
+                && Mathf.Approximately(importer.spritePixelsPerUnit, Cell)
+                && AssetDatabase.LoadAllAssetsAtPath(path).OfType<Sprite>().Count() == Size * Size)
+                return;
 
             importer.spriteImportMode = SpriteImportMode.Multiple;
+            importer.spritePixelsPerUnit = Cell;
+            importer.filterMode = FilterMode.Point;
             importer.SaveAndReimport();
 
             SpriteDataProviderFactories factory = new SpriteDataProviderFactories();
@@ -654,7 +852,7 @@ namespace aTES.EditorTools
             importer.SaveAndReimport();
         }
 
-        private static void PaintSheet(string path, Tilemap target, bool barriers)
+        private static void PaintSheet(string path, Tilemap target)
         {
             string sheet = Path.GetFileNameWithoutExtension(path);
             Texture2D tex = new Texture2D(2, 2);
@@ -675,7 +873,7 @@ namespace aTES.EditorTools
                 if (!tiles.TryGetValue(hash.ToHashCode(), out TileBase tile))
                 {
                     tile = AssetDatabase.LoadAssetAtPath<TileBase>($"{TileFolder}/{name}.asset")
-                           ?? NewTile($"{TileFolder}/{name}.asset", sprites[name], barriers ? px : null);
+                           ?? NewTile($"{TileFolder}/{name}.asset", sprites[name]);
                     tiles[hash.ToHashCode()] = tile;
                 }
 
@@ -686,33 +884,13 @@ namespace aTES.EditorTools
             AssetDatabase.SaveAssets();
         }
 
-        private static TileBase NewTile(string path, Sprite sprite, Color[] barrierPixels)
+        private static TileBase NewTile(string path, Sprite sprite)
         {
-            Tile tile = barrierPixels != null ? ScriptableObject.CreateInstance<BarrierTile>() : ScriptableObject.CreateInstance<Tile>();
+            Tile tile = ScriptableObject.CreateInstance<Tile>();
             tile.sprite = sprite;
             tile.colliderType = Tile.ColliderType.None;
-
-            if (barrierPixels != null)
-            {
-                SerializedObject so = new SerializedObject(tile);
-                so.FindProperty("blockedSides").intValue = (int)DetectSides(barrierPixels);
-                so.ApplyModifiedPropertiesWithoutUndo();
-            }
-
             AssetDatabase.CreateAsset(tile, path);
             return tile;
-        }
-
-        private static TileSides DetectSides(Color[] px)
-        {
-            TileSides sides = TileSides.None;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3Int d = Sides.Dir[i];
-                int count = px.Where((p, k) => p.a >= 0.08f && d.x * (k % Cell - 7.5f) + d.y * (k / Cell - 7.5f) > 2.5f).Count();
-                if (count >= EdgeMinPixels) sides |= (TileSides)(1 << i);
-            }
-            return sides;
         }
 
         private static Tilemap NewTilemap(GameObject parent, string name, int order)

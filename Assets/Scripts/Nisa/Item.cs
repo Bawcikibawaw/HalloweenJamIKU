@@ -6,6 +6,7 @@ public class Item : MonoBehaviour
 {
     public ItemData Data { get; private set; }
     public bool IsCollected { get; private set; }
+    public bool IsBeingDragged { get; set; }
 
     public void Initialize(ItemData data)
     {

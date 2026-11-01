@@ -11,7 +11,7 @@ namespace aTES
     [ExecuteAlways]
     public class LevelManager : MonoBehaviour
     {
-        [SerializeField] private float cameraZoom = 8.6f;
+        [SerializeField] private float cameraZoom = 9.6f;
         [SerializeField] private float rightOffset = 1.8f;
         [SerializeField] private float bottomOffset = -0.3f;
 
@@ -29,7 +29,7 @@ namespace aTES
             Camera cam = Camera.main;
             if (cam == null) return;
             cam.orthographicSize = cameraZoom;
-            cam.transform.position = new Vector3(8f + rightOffset - cameraZoom * cam.aspect, -8f - bottomOffset + cameraZoom, -10f);
+            cam.transform.position = new Vector3(9f + rightOffset - cameraZoom * cam.aspect, -9f - bottomOffset + cameraZoom, -10f);
         }
 
         [ContextMenu("Next Level")]

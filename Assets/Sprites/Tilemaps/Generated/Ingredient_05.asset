@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cdc05ccc28121aa4bb24d02b17bb950f, type: 3}
+  m_Name: Ingredient_05
+  m_EditorClassIdentifier: Assembly-CSharp::ItemData
+  itemName: chars_5
+  itemPrefab: {fileID: 3623329741803001027, guid: c60b2397e96545f4b9f45d2c8c1c1c37, type: 3}
+  itemSprite: {fileID: 3844603948434292935, guid: 3f545f75595ad3048b8c2d9e9a785efd, type: 3}
+  gatheredSprite: {fileID: 3844603948434292935, guid: 3f545f75595ad3048b8c2d9e9a785efd, type: 3}
