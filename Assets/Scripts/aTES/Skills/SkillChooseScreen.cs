@@ -19,6 +19,7 @@ namespace aTES
 
         private readonly Dictionary<Skill, Image> buttons = new();
         private SkillManager manager;
+        private LevelManager levelManager;
         private Button startButton;
         private TMP_Text countText;
 
@@ -30,6 +31,9 @@ namespace aTES
                 gameObject.SetActive(false);
                 return;
             }
+
+            levelManager = FindFirstObjectByType<LevelManager>();
+            if (levelManager != null) levelManager.OnLevelChanged += HandleLevelChanged;
 
             startButton = transform.Find("StartButton")?.GetComponent<Button>();
             countText = transform.Find("CountText")?.GetComponent<TMP_Text>();
@@ -50,6 +54,16 @@ namespace aTES
         private void OnDestroy()
         {
             if (manager != null) manager.OnEquippedChanged -= Refresh;
+            if (levelManager != null) levelManager.OnLevelChanged -= HandleLevelChanged;
+        }
+
+        private void HandleLevelChanged(int _)
+        {
+            if (manager == null) return;
+            manager.ClearEquipped();
+            gameObject.SetActive(true);
+            Time.timeScale = 0f;
+            Refresh();
         }
 
         private void Refresh()

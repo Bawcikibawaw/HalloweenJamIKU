@@ -23,8 +23,9 @@ namespace aTES.EditorTools
     /// </summary>
     public static class PathTestSceneBuilder
     {
-        private const string NewTilemapFolder = "Assets/Sprites/New Tilemaps";
-        private const string FloorSheet = "Assets/Sprites/New Tilemaps/GAME BC 1.png";
+        private const string FloorSheet = "Assets/Sprites/Final Tilemaps/GAME bc.png";
+        private const string OuterWallSheet = "Assets/Sprites/Final Tilemaps/GAME duvar.png";
+        private const string InnerWallAtlas = "Assets/Sprites/Final Tilemaps/TAYIL SET.png";
         private const string CharsSheet = "Assets/Sprites/chars.png";
         private const string TileFolder = "Assets/Sprites/Tilemaps/Generated";
         private const int Cell = 32;
@@ -195,36 +196,46 @@ namespace aTES.EditorTools
                 ".##..##..##..##.",
                 "................",
             },
-            // Level 9 (False God's Altar)
+            // Level 9 (Final Level - The Pizza Oven Plaza: large 8x6 central space at cols 5..12, rows 6..11)
             new[]
             {
-                "..###..##..###..",
-                ".#.....##.....#.",
-                ".#.###....###.#.",
-                ".#.#.##..##.#.#.",
-                "...#.#....#.#...",
-                ".###.#.##.#.###.",
-                ".....#.##.#.....",
-                ".#####....#####.",
-                ".#####....#####.",
-                ".....#.##.#.....",
-                ".###.#.##.#.###.",
-                "...#.#....#.#...",
-                ".#.#.##..##.#.#.",
-                ".#.###....###.#.",
-                ".#.....##.....#.",
-                "..###..##..###..",
+                "..###......###..",
+                ".#............#.",
+                ".#.###.##.###.#.",
+                "...#........#...",
+                ".###.##..##.###.",
+                "................",
+                ".##..........##.",
+                ".##..........##.",
+                ".##..........##.",
+                ".##..........##.",
+                "................",
+                ".###.##..##.###.",
+                "...#........#...",
+                ".#.###.##.###.#.",
+                ".#............#.",
+                "..###......###..",
             },
+        };
+
+        // Per-level (StartPoint, DeliveryPoint) in 1..16 inner floor coordinates (col, row):
+        private static readonly (Vector2Int start, Vector2Int delivery)[] LevelPoints =
+        {
+            (new Vector2Int(1, 1),   new Vector2Int(1, 16)),  // Level 1: Top-Left -> Bottom-Left
+            (new Vector2Int(1, 1),   new Vector2Int(16, 16)), // Level 2: Top-Left -> Bottom-Right
+            (new Vector2Int(16, 1),  new Vector2Int(1, 16)),  // Level 3: Top-Right -> Bottom-Left
+            (new Vector2Int(1, 1),   new Vector2Int(7, 7)),   // Level 4: Outer Corner -> Spiral Center
+            (new Vector2Int(8, 16),  new Vector2Int(8, 2)),   // Level 5: Skull Jaw -> Skull Crown
+            (new Vector2Int(1, 8),   new Vector2Int(16, 9)),  // Level 6: West Gate -> East Gate
+            (new Vector2Int(8, 2),   new Vector2Int(8, 15)),  // Level 7: Top Hourglass -> Bottom Hourglass
+            (new Vector2Int(1, 16),  new Vector2Int(16, 1)),  // Level 8: Bottom-Left -> Top-Right
+            (new Vector2Int(8, 8),   new Vector2Int(8, 8)),   // Level 9 (Final): Center Pizza Oven Plaza (both spawn & gather)
         };
 
         [MenuItem("Tools/aTES/Build Path Test Scene")]
         public static void Build()
         {
-            string[] newTexPaths = AssetDatabase.FindAssets("t:Texture2D", new[] { NewTilemapFolder }).Select(AssetDatabase.GUIDToAssetPath).ToArray();
-            string outer = newTexPaths.First(p => Path.GetFileName(p).StartsWith("GAME d"));
-            string innerAtlas = newTexPaths.First(p => Path.GetFileName(p).EndsWith("tile map.png"));
-
-            foreach (string sheet in new[] { FloorSheet, outer }) Slice(sheet);
+            foreach (string sheet in new[] { FloorSheet, OuterWallSheet }) Slice(sheet);
 
             AssetDatabase.DeleteAsset(TileFolder);
             Directory.CreateDirectory(TileFolder);
@@ -237,23 +248,23 @@ namespace aTES.EditorTools
                 if (old != null) Object.DestroyImmediate(old);
             }
 
-            // 1. Levels + LevelManager + PathCreator (9 levels using New Tilemaps)
+            // 1. Levels + LevelManager + PathCreator (9 levels using Final Tilemaps)
             GameObject levelsRoot = new GameObject("Levels");
             LevelManager levelManager = levelsRoot.AddComponent<LevelManager>();
 
-            Dictionary<int, TileBase> innerTiles = BuildInnerWallTiles(innerAtlas);
+            Dictionary<int, TileBase> innerTiles = BuildInnerWallTiles(InnerWallAtlas);
             Tilemap ground1 = null;
 
             for (int i = 0; i < Levels.Length; i++)
             {
-                Tilemap g = BuildCustomLevel(levelsRoot.transform, $"Level {i + 1}", outer, Levels[i], innerTiles);
+                (Vector2Int start, Vector2Int delivery) = LevelPoints[i];
+                Tilemap g = BuildCustomLevel(levelsRoot.transform, $"Level {i + 1}", OuterWallSheet, Levels[i], innerTiles, start, delivery);
                 if (i == 0) ground1 = g;
             }
-            levelManager.Show(0);
 
             // 2. Start & Delivery Points
-            Vector3 startWorld = ground1.GetCellCenterWorld(CellOf(1, 1));
-            Vector3 deliveryWorld = ground1.GetCellCenterWorld(CellOf(1, 16));
+            Vector3 startWorld = ground1.GetCellCenterWorld(CellOf(LevelPoints[0].start.x, LevelPoints[0].start.y));
+            Vector3 deliveryWorld = ground1.GetCellCenterWorld(CellOf(LevelPoints[0].delivery.x, LevelPoints[0].delivery.y));
 
             GameObject startPointObj = new GameObject("PlayerStartPoint");
             startPointObj.transform.position = startWorld;
@@ -280,6 +291,7 @@ namespace aTES.EditorTools
             }
             GameObjectUtility.RemoveMonoBehavioursWithMissingScript(player);
             player.transform.position = startWorld;
+            levelManager.Show(0);
 
             if (player.transform.Find("HandPoint") == null)
             {
@@ -450,8 +462,8 @@ namespace aTES.EditorTools
                 RectTransform logoRt = logo.AddComponent<RectTransform>();
                 logoRt.anchorMin = Vector2.zero;
                 logoRt.anchorMax = Vector2.one;
-                logoRt.offsetMin = new Vector2(10f, 10f);
-                logoRt.offsetMax = new Vector2(-10f, -10f);
+                logoRt.offsetMin = new Vector2(4f, 4f);
+                logoRt.offsetMax = new Vector2(-4f, -4f);
                 Image logoImg = logo.AddComponent<Image>();
                 logoImg.color = new Color(0.85f, 0.75f, 0.35f, 0.9f);
                 logoImg.preserveAspect = true;
@@ -590,7 +602,11 @@ namespace aTES.EditorTools
             CreateTMP(timerPanel.transform, "WarningText", new Vector2(0.5f, 1f), new Vector2(0f, -36f), 17, new Color(1f, 0.4f, 0.2f), "");
 
             new GameObject("GameTimer").AddComponent<GameTimer>();
-            new GameObject("SkillManager").AddComponent<SkillManager>();
+            SkillManager skillManager = new GameObject("SkillManager").AddComponent<SkillManager>();
+            SerializedObject smSO = new SerializedObject(skillManager);
+            AssignSprites(smSO.FindProperty("curseIcons"), "Assets/Sprites/CurseTier.png");
+            AssignSprites(smSO.FindProperty("trickeryIcons"), "Assets/Sprites/Tier1.png");
+            smSO.ApplyModifiedPropertiesWithoutUndo();
 
             // 6. Skill Choose Page (covers the map until 5 skills are chosen; columns are filled at runtime per skill tree)
             GameObject choosePanel = CreatePanel(
@@ -744,8 +760,30 @@ namespace aTES.EditorTools
             return tmp;
         }
 
+        private static void AssignSprites(SerializedProperty arrayProp, string assetPath)
+        {
+            Sprite[] sprites = AssetDatabase.LoadAllAssetsAtPath(assetPath)
+                .OfType<Sprite>()
+                .OrderBy(s => s.rect.x)
+                .ToArray();
+            arrayProp.ClearArray();
+            for (int i = 0; i < sprites.Length; i++)
+            {
+                arrayProp.InsertArrayElementAtIndex(i);
+                arrayProp.GetArrayElementAtIndex(i).objectReferenceValue = sprites[i];
+            }
+        }
+
         private static Dictionary<int, TileBase> BuildInnerWallTiles(string atlasPath)
         {
+            TextureImporter importer = (TextureImporter)AssetImporter.GetAtPath(atlasPath);
+            if (!Mathf.Approximately(importer.spritePixelsPerUnit, Cell) || importer.filterMode != FilterMode.Point)
+            {
+                importer.spritePixelsPerUnit = Cell;
+                importer.filterMode = FilterMode.Point;
+                importer.SaveAndReimport();
+            }
+
             Texture2D tex = new Texture2D(2, 2);
             tex.LoadImage(File.ReadAllBytes(atlasPath));
 
@@ -791,7 +829,7 @@ namespace aTES.EditorTools
             return (ground, walls);
         }
 
-        private static Tilemap BuildCustomLevel(Transform parent, string name, string outerPath, string[] layout, Dictionary<int, TileBase> innerTiles)
+        private static Tilemap BuildCustomLevel(Transform parent, string name, string outerPath, string[] layout, Dictionary<int, TileBase> innerTiles, Vector2Int start, Vector2Int delivery)
         {
             (Tilemap ground, Tilemap walls) = NewBaseLevel(parent, name, outerPath);
             for (int r = 0; r < InnerSize; r++)
@@ -812,6 +850,16 @@ namespace aTES.EditorTools
                     }
                 }
             }
+
+            Transform levelRoot = ground.transform.parent;
+            GameObject sp = new GameObject("StartPoint");
+            sp.transform.SetParent(levelRoot, false);
+            sp.transform.position = ground.GetCellCenterWorld(CellOf(start.x, start.y));
+
+            GameObject dp = new GameObject("DeliveryPoint");
+            dp.transform.SetParent(levelRoot, false);
+            dp.transform.position = ground.GetCellCenterWorld(CellOf(delivery.x, delivery.y));
+
             ground.GetComponentInParent<PathCreator>().ScanMap();
             return ground;
         }

@@ -17,7 +17,7 @@ namespace aTES
         public SkillTree Tree { get; }
         public int Tier { get; }
         public float Cooldown { get; }
-        public Sprite Icon { get; }
+        public Sprite Icon { get; set; }
         public Color Color => TreeColor(Tree);
 
         protected float readyTime;

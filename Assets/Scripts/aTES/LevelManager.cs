@@ -37,11 +37,28 @@ namespace aTES
 
         public void Show(int index)
         {
+            if (transform.childCount == 0) return;
             Current = Mathf.Clamp(index, 0, transform.childCount - 1);
 
             for (int i = 0; i < transform.childCount; i++)
             {
                 transform.GetChild(i).gameObject.SetActive(i == Current);
+            }
+
+            Transform activeLevel = transform.GetChild(Current);
+            Transform levelStart = activeLevel.Find("StartPoint");
+            Transform levelDelivery = activeLevel.Find("DeliveryPoint");
+
+            GameObject startObj = GameObject.Find("PlayerStartPoint");
+            if (startObj != null && levelStart != null) startObj.transform.position = levelStart.position;
+
+            GameObject deliveryObj = GameObject.Find("DeliveryPoint");
+            if (deliveryObj != null && levelDelivery != null) deliveryObj.transform.position = levelDelivery.position;
+
+            if (!Application.isPlaying && startObj != null)
+            {
+                GameObject player = GameObject.Find("Player");
+                if (player != null) player.transform.position = startObj.transform.position;
             }
 
             TMP_Text levelText = GameObject.Find("LevelText")?.GetComponent<TMP_Text>();

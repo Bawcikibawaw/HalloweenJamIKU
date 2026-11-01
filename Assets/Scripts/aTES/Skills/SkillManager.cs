@@ -15,6 +15,9 @@ namespace aTES
         public const int SlotCount = 5;
         public static SkillManager Instance { get; private set; }
 
+        [SerializeField] private Sprite[] curseIcons;
+        [SerializeField] private Sprite[] trickeryIcons;
+
         private readonly List<Skill> equipped = new();
 
         public IReadOnlyList<Skill> AllSkills { get; private set; }
@@ -38,6 +41,35 @@ namespace aTES
                 .Select(t => (Skill)Activator.CreateInstance(t))
                 .OrderBy(s => s.Tree).ThenBy(s => s.Tier)
                 .ToList();
+
+#if UNITY_EDITOR
+            if (curseIcons == null || curseIcons.Length == 0)
+            {
+                curseIcons = UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/CurseTier.png")
+                    .OfType<Sprite>()
+                    .OrderBy(s => s.rect.x)
+                    .ToArray();
+            }
+            if (trickeryIcons == null || trickeryIcons.Length == 0)
+            {
+                trickeryIcons = UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/Tier1.png")
+                    .OfType<Sprite>()
+                    .OrderBy(s => s.rect.x)
+                    .ToArray();
+            }
+#endif
+
+            foreach (Skill s in AllSkills)
+            {
+                Sprite[] icons = s.Tree switch
+                {
+                    SkillTree.Curse => curseIcons,
+                    SkillTree.Trickery => trickeryIcons,
+                    _ => null
+                };
+                if (icons != null && s.Tier >= 1 && s.Tier <= icons.Length && icons[s.Tier - 1] != null)
+                    s.Icon = icons[s.Tier - 1];
+            }
         }
 
         private void Start()
@@ -65,6 +97,12 @@ namespace aTES
         {
             if (AllSkills == null) return;
             foreach (Skill s in AllSkills) s.ResetCooldown();
+        }
+
+        public void ClearEquipped()
+        {
+            equipped.Clear();
+            OnEquippedChanged?.Invoke();
         }
 
         private void Update()
