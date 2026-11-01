@@ -27,6 +27,22 @@ public class PlayerAI : MonoBehaviour
     public Vector3 DeliveryPosition => deliveryPoint != null ? deliveryPoint.position : transform.position;
     public Vector3? NextStep => currentWaypoint < currentPath.Count ? currentPath[currentWaypoint] : null;
 
+    /// <summary>Returns the next cell on the path that the chef has not entered yet (i.e. not the cell he currently stands in).</summary>
+    public Vector3Int? GetStepAheadCell(PathCreator map)
+    {
+        if (map == null || currentPath == null) return null;
+        Vector3Int playerCell = map.WorldToCell(transform.position);
+
+        for (int i = currentWaypoint; i < currentPath.Count; i++)
+        {
+            Vector3Int cell = map.WorldToCell(currentPath[i]);
+            if (cell != playerCell && map.IsWalkable(cell))
+                return cell;
+        }
+
+        return null;
+    }
+
     private void Awake()
     {
         stats = GetComponent<PlayerStats>();
@@ -169,6 +185,7 @@ public class PlayerAI : MonoBehaviour
 
     private bool MoveAlongPath()
     {
+        if (currentPath == null || currentPath.Count == 0) return false;
         if (currentWaypoint >= currentPath.Count) return true;
 
         Vector3 target = currentPath[currentWaypoint];
@@ -237,6 +254,29 @@ public class PlayerAI : MonoBehaviour
     public void Replan()
     {
         currentWaypoint = 0;
+        PathCreator map = PathCreator.Active;
+        if (map != null)
+        {
+            Vector3Int currentCell = map.WorldToCell(transform.position);
+            if (!map.IsWalkable(currentCell))
+            {
+                // If chef is somehow inside an unwalkable cell, push him to the closest walkable neighbor
+                Vector3Int safeCell = currentCell;
+                float bestDist = float.MaxValue;
+                foreach (Vector3Int dir in Sides.Dir)
+                {
+                    Vector3Int n = currentCell + dir;
+                    if (map.IsWalkable(n))
+                    {
+                        float d = (n - currentCell).sqrMagnitude;
+                        if (d < bestDist) { bestDist = d; safeCell = n; }
+                    }
+                }
+                if (bestDist < float.MaxValue)
+                    transform.position = map.CellToWorldCenter(safeCell);
+            }
+        }
+
         if (!IsCarrying)
         {
             currentTarget = null;
@@ -245,8 +285,14 @@ public class PlayerAI : MonoBehaviour
             return;
         }
 
-        PathCreator map = PathCreator.Active;
-        currentPath = FindPath(map, map.WorldToCell(transform.position), map.WorldToCell(deliveryPoint.position)) ?? new List<Vector3>();
+        if (map != null && deliveryPoint != null)
+        {
+            currentPath = FindPath(map, map.WorldToCell(transform.position), map.WorldToCell(deliveryPoint.position)) ?? new List<Vector3>();
+        }
+        else
+        {
+            currentPath.Clear();
+        }
     }
 
     private void HandleItemPositionChanged(Item item, Vector3 newPos)
@@ -267,7 +313,26 @@ public class PlayerAI : MonoBehaviour
 
     private static List<Vector3> FindPath(PathCreator map, Vector3Int start, Vector3Int target)
     {
-        if (map == null || !map.IsWalkable(start) || !map.IsWalkable(target)) return null;
+        if (map == null || !map.IsWalkable(target)) return null;
+
+        if (!map.IsWalkable(start))
+        {
+            // Find closest walkable neighbor to start
+            Vector3Int safeStart = start;
+            float bestDist = float.MaxValue;
+            foreach (Vector3Int dir in Sides.Dir)
+            {
+                Vector3Int n = start + dir;
+                if (map.IsWalkable(n))
+                {
+                    float d = (n - start).sqrMagnitude;
+                    if (d < bestDist) { bestDist = d; safeStart = n; }
+                }
+            }
+            if (bestDist == float.MaxValue) return null;
+            start = safeStart;
+        }
+
         if (start == target) return new List<Vector3>();
 
         List<Vector3Int> open = new() { start };

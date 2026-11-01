@@ -29,6 +29,8 @@ public class GameTimer : MonoBehaviour
         Canvas canvas = FindFirstObjectByType<Canvas>();
         if (canvas != null)
         {
+            if (timerText == null) timerText = canvas.transform.Find("TimerPanel/TimerText")?.GetComponent<TMP_Text>();
+            if (warningText == null) warningText = canvas.transform.Find("TimerPanel/WarningText")?.GetComponent<TMP_Text>();
             levelWonPanel = canvas.transform.Find("LevelWonPanel")?.gameObject;
             levelFailedPanel = canvas.transform.Find("LevelFailedPanel")?.gameObject;
 

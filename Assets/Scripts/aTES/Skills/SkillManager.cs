@@ -17,9 +17,13 @@ namespace aTES
 
         [SerializeField] private Sprite[] curseIcons;
         [SerializeField] private Sprite[] trickeryIcons;
+        [SerializeField] private Sprite[] chaosIcons;
+        [SerializeField] private Sprite cursorSprite;
+        [SerializeField] private Sprite buttonSprite;
 
         private readonly List<Skill> equipped = new();
 
+        public Sprite ButtonSprite => buttonSprite;
         public IReadOnlyList<Skill> AllSkills { get; private set; }
         public IReadOnlyList<Skill> Equipped => equipped;
         public PlayerAI Player { get; private set; }
@@ -57,7 +61,32 @@ namespace aTES
                     .OrderBy(s => s.rect.x)
                     .ToArray();
             }
+            Sprite[] chaosRaw = UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/ChaosTier.png")
+                .OfType<Sprite>()
+                .OrderBy(s => s.rect.x)
+                .ToArray();
+            if (chaosRaw.Length >= 5)
+            {
+                chaosIcons = new[] { chaosRaw[0], chaosRaw[4], chaosRaw[1], chaosRaw[2], chaosRaw[3] };
+            }
+            Sprite[] stuff3 = UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/stuff3-(stas work).png")
+                .OfType<Sprite>()
+                .OrderBy(s => s.name)
+                .ToArray();
+            if (stuff3.Length > 6) cursorSprite = stuff3[6];
+
+            if (cursorSprite == null || buttonSprite == null)
+            {
+                Sprite[] stuff = UnityEditor.AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/stuff.png")
+                    .OfType<Sprite>()
+                    .OrderBy(s => s.name)
+                    .ToArray();
+                if (stuff.Length > 4 && cursorSprite == null) cursorSprite = stuff[4];
+                if (stuff.Length > 5 && buttonSprite == null) buttonSprite = stuff[5];
+            }
 #endif
+
+            ApplyCursor(cursorSprite);
 
             foreach (Skill s in AllSkills)
             {
@@ -65,11 +94,23 @@ namespace aTES
                 {
                     SkillTree.Curse => curseIcons,
                     SkillTree.Trickery => trickeryIcons,
+                    SkillTree.Chaos => chaosIcons,
                     _ => null
                 };
                 if (icons != null && s.Tier >= 1 && s.Tier <= icons.Length && icons[s.Tier - 1] != null)
                     s.Icon = icons[s.Tier - 1];
             }
+        }
+
+        private static void ApplyCursor(Sprite sprite)
+        {
+            if (sprite == null || sprite.texture == null || !sprite.texture.isReadable) return;
+            Rect r = sprite.rect;
+            int w = Mathf.RoundToInt(r.width), h = Mathf.RoundToInt(r.height);
+            Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            tex.SetPixels(sprite.texture.GetPixels(Mathf.RoundToInt(r.x), Mathf.RoundToInt(r.y), w, h));
+            tex.Apply();
+            Cursor.SetCursor(tex, new Vector2(w * 0.5f, h * 0.2f), CursorMode.ForceSoftware);
         }
 
         private void Start()

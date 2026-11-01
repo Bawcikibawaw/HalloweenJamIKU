@@ -9,10 +9,13 @@ namespace aTES
 
         protected override bool Activate(SkillManager m)
         {
-            if (m.Player.NextStep is not { } stepPos) return false;
-
             PathCreator map = m.Map;
-            Vector3Int blockedCell = map.WorldToCell(stepPos);
+            if (map == null || m.Player == null) return false;
+
+            Vector3Int? targetCellOpt = m.Player.GetStepAheadCell(map);
+            if (!targetCellOpt.HasValue) return false;
+
+            Vector3Int blockedCell = targetCellOpt.Value;
             if (!map.IsWalkable(blockedCell)) return false;
 
             m.StartCoroutine(SpawnPhantomWall(m, map, blockedCell, 6f));
@@ -21,12 +24,34 @@ namespace aTES
 
         private static IEnumerator SpawnPhantomWall(SkillManager m, PathCreator map, Vector3Int cell, float duration)
         {
+            Vector3 cellCenter = map.CellToWorldCenter(cell);
+            if (m.Player != null && Vector3.Distance(m.Player.transform.position, cellCenter) < 0.85f)
+            {
+                Vector3Int playerCell = map.WorldToCell(m.Player.transform.position);
+                if (playerCell == cell || !map.IsWalkable(playerCell))
+                {
+                    Vector3Int safeCell = playerCell;
+                    float minDist = float.MaxValue;
+                    foreach (Vector3Int dir in Sides.Dir)
+                    {
+                        Vector3Int n = cell + dir;
+                        if (n != cell && map.IsWalkable(n))
+                        {
+                            float d = (n - cell).sqrMagnitude;
+                            if (d < minDist) { minDist = d; safeCell = n; }
+                        }
+                    }
+                    if (minDist < float.MaxValue)
+                        m.Player.transform.position = map.CellToWorldCenter(safeCell);
+                }
+            }
+
             map.SetWalkable(cell, false);
-            m.Player.Replan();
+            if (m.Player != null) m.Player.Replan();
 
             GameObject wallVisual = new GameObject("PhantomWall");
             wallVisual.transform.SetParent(map.transform, false);
-            wallVisual.transform.position = map.CellToWorldCenter(cell);
+            wallVisual.transform.position = cellCenter;
             wallVisual.transform.localScale = Vector3.one * 0.85f;
 
             SpriteRenderer sr = wallVisual.AddComponent<SpriteRenderer>();

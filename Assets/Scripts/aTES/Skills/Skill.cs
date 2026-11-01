@@ -51,9 +51,9 @@ namespace aTES
 
         public static Color TreeColor(SkillTree tree) => tree switch
         {
-            SkillTree.Curse => new Color(0.65f, 0.35f, 0.9f),
-            SkillTree.Trickery => new Color(0.35f, 0.8f, 0.45f),
-            _ => new Color(1f, 0.55f, 0.2f),
+            SkillTree.Curse => new Color(0.9f, 0.25f, 0.25f),
+            SkillTree.Trickery => new Color(0.25f, 0.6f, 0.95f),
+            _ => new Color(0.65f, 0.35f, 0.9f),
         };
 
         // ---- Shared helpers for skills ----

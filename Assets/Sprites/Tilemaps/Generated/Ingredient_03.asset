@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Ingredient_03
   m_EditorClassIdentifier: Assembly-CSharp::ItemData
   itemName: chars_3
-  itemPrefab: {fileID: 3937015667498065017, guid: c60b2397e96545f4b9f45d2c8c1c1c37, type: 3}
+  itemPrefab: {fileID: 7209721671185308542, guid: c60b2397e96545f4b9f45d2c8c1c1c37, type: 3}
   itemSprite: {fileID: 575685369645702779, guid: 3f545f75595ad3048b8c2d9e9a785efd, type: 3}
   gatheredSprite: {fileID: 575685369645702779, guid: 3f545f75595ad3048b8c2d9e9a785efd, type: 3}

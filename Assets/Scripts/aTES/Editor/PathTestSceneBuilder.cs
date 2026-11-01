@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -6,10 +7,12 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.U2D.Sprites;
 using UnityEngine;
+using Object = UnityEngine.Object;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.Tilemaps;
 using UnityEngine.UI;
+using aTES;
 
 namespace aTES.EditorTools
 {
@@ -263,6 +266,16 @@ namespace aTES.EditorTools
             }
 
             // 2. Start & Delivery Points
+            Sprite[] stuff = AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/stuff.png")
+                .OfType<Sprite>()
+                .OrderBy(s => s.name)
+                .ToArray();
+            Sprite[] stuff3 = AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/stuff3-(stas work).png")
+                .OfType<Sprite>()
+                .OrderBy(s => s.name)
+                .ToArray();
+            Sprite baseSprite = AssetDatabase.LoadAllAssetsAtPath(FloorSheet).OfType<Sprite>().First(s => s.name.EndsWith("_1_1"));
+
             Vector3 startWorld = ground1.GetCellCenterWorld(CellOf(LevelPoints[0].start.x, LevelPoints[0].start.y));
             Vector3 deliveryWorld = ground1.GetCellCenterWorld(CellOf(LevelPoints[0].delivery.x, LevelPoints[0].delivery.y));
 
@@ -271,12 +284,11 @@ namespace aTES.EditorTools
 
             GameObject deliveryPointObj = new GameObject("DeliveryPoint");
             deliveryPointObj.transform.position = deliveryWorld;
-            Sprite baseSprite = AssetDatabase.LoadAllAssetsAtPath(FloorSheet).OfType<Sprite>().First(s => s.name.EndsWith("_1_1"));
             SpriteRenderer deliveryRenderer = deliveryPointObj.AddComponent<SpriteRenderer>();
-            deliveryRenderer.sprite = baseSprite;
-            deliveryRenderer.color = new Color(0.2f, 0.9f, 1f, 0.85f);
+            deliveryRenderer.sprite = stuff3.Length > 5 ? stuff3[5] : (stuff.Length > 3 ? stuff[3] : baseSprite);
+            deliveryRenderer.color = Color.white;
             deliveryRenderer.sortingOrder = 2;
-            deliveryPointObj.transform.localScale = Vector3.one * 0.7f;
+            deliveryPointObj.transform.localScale = Vector3.one;
 
             // 3. Player + HandPoint + PlayerMoveRays + PlayerAI
             GameObject player = GameObject.Find("Player");
@@ -322,16 +334,16 @@ namespace aTES.EditorTools
             imSO.ApplyModifiedPropertiesWithoutUndo();
 
             // 5. GameTimer + UI Canvas (False God top-left, 15 Skill Boxes in grid below it, 5 Ingredient Boxes bottom-left)
-            SetupGameUI(baseSprite);
+            SetupGameUI(baseSprite, stuff, stuff3);
 
-            // 6. Camera (Black screen, map framed in bottom-right corner with top space for Time UI)
+            // 6. Camera (Black screen, map shifted slightly left & up so its bottom aligns with IngredientsPanel)
             if (Camera.main != null)
             {
                 Camera.main.clearFlags = CameraClearFlags.SolidColor;
                 Camera.main.backgroundColor = Color.black;
-                Camera.main.orthographicSize = 9.6f;
+                Camera.main.orthographicSize = 9.9f;
                 float h = Camera.main.orthographicSize;
-                Camera.main.transform.position = new Vector3(10.8f - h * Camera.main.aspect, -8.7f + h, -10f);
+                Camera.main.transform.position = new Vector3(11.6f - h * Camera.main.aspect, -9.5f + h, -10f);
             }
 
             EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
@@ -383,8 +395,38 @@ namespace aTES.EditorTools
             return result;
         }
 
-        private static void SetupGameUI(Sprite placeholderSprite)
+        private static void SetupGameUI(Sprite placeholderSprite, Sprite[] stuff, Sprite[] stuff3)
         {
+            Sprite[] stuff2 = AssetDatabase.LoadAllAssetsAtPath("Assets/Sprites/stuff2.png")
+                .OfType<Sprite>()
+                .OrderBy(s => s.name)
+                .ToArray();
+
+            Sprite panelSprite = stuff.Length > 0 ? stuff[0] : placeholderSprite;
+            Sprite leftPanelSprite = stuff2.Length > 0 ? stuff2[0] : panelSprite;
+
+            // stuff3 sprite mapping:
+            // 0: Skill Choose Panel
+            // 1: Pause Panel
+            // 2: Gathered Item Box
+            // 3: Chosen Skill Box
+            // 4: Gathered Item Background Panel
+            // 5: Gathering Spot (DeliveryPoint)
+            // 6: Cursor
+            // 7: Chosen Skill Background Panel
+            // 8: Skill Description Background Panel
+            // 9: False Gods Background Panel
+            Sprite choosePanelSprite = stuff3.Length > 0 ? stuff3[0] : panelSprite;
+            Sprite pausePanelSprite = stuff3.Length > 1 ? stuff3[1] : panelSprite;
+            Sprite gatheredBoxSprite = stuff3.Length > 2 ? stuff3[2] : (stuff.Length > 1 ? stuff[1] : placeholderSprite);
+            Sprite skillBoxSprite = stuff3.Length > 3 ? stuff3[3] : (stuff.Length > 2 ? stuff[2] : placeholderSprite);
+            Sprite gatheredPanelSprite = stuff3.Length > 4 ? stuff3[4] : leftPanelSprite;
+            Sprite cursorSprite = stuff3.Length > 6 ? stuff3[6] : (stuff.Length > 4 ? stuff[4] : null);
+            Sprite chosenSkillPanelSprite = stuff3.Length > 7 ? stuff3[7] : leftPanelSprite;
+            Sprite skillPopupPanelSprite = stuff3.Length > 8 ? stuff3[8] : leftPanelSprite;
+            Sprite falseGodPanelSprite = stuff3.Length > 9 ? stuff3[9] : leftPanelSprite;
+            Sprite buttonSprite = stuff.Length > 5 ? stuff[5] : placeholderSprite;
+
             GameObject es = new GameObject("EventSystem");
             es.AddComponent<EventSystem>();
             es.AddComponent<InputSystemUIInputModule>();
@@ -400,7 +442,7 @@ namespace aTES.EditorTools
 
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            // 1. False God Design (Top-Left Corner, shifted right)
+            // 1. False God Design (Top-Left Corner, uses stuff3_9 panel background)
             GameObject falseGodPanel = CreatePanel(
                 canvasObj.transform,
                 "FalseGodPanel",
@@ -408,36 +450,21 @@ namespace aTES.EditorTools
                 new Vector2(0f, 1f),
                 new Vector2(140f, -40f),
                 new Vector2(460f, 300f),
-                new Color(0.08f, 0.08f, 0.1f, 0.95f),
-                new Color(0.75f, 0.2f, 0.25f, 1f));
+                falseGodPanelSprite);
 
-            GameObject godArtwork = new GameObject("FalseGodDesign");
-            godArtwork.transform.SetParent(falseGodPanel.transform, false);
-            RectTransform godRt = godArtwork.AddComponent<RectTransform>();
-            godRt.anchorMin = new Vector2(0.5f, 0.5f);
-            godRt.anchorMax = new Vector2(0.5f, 0.5f);
-            godRt.anchoredPosition = new Vector2(0f, 15f);
-            godRt.sizeDelta = new Vector2(200f, 200f);
-            Image godImg = godArtwork.AddComponent<Image>();
-            godImg.sprite = placeholderSprite;
-            godImg.color = new Color(0.6f, 0.15f, 0.2f, 1f);
-
-            CreateTMP(falseGodPanel.transform, "FalseGodTitle", new Vector2(0.5f, 0f), new Vector2(0f, 35f), 26, new Color(0.95f, 0.8f, 0.8f), "FALSE GOD");
-
-            // 2. Skills Grid (Under False God Design - 5 chosen skill boxes in a 5x1 grid)
+            // 2. Skills Grid (Under False God Design - 5 chosen skill boxes in a 5x1 grid using stuff3_7 background & stuff3_3 boxes)
             GameObject skillsGridObj = CreatePanel(
                 canvasObj.transform,
                 "SkillsGrid",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(140f, -360f),
-                new Vector2(460f, 106f),
-                new Color(0.05f, 0.05f, 0.07f, 0.9f),
-                new Color(0.35f, 0.35f, 0.4f, 1f));
+                new Vector2(140f, -352f),
+                new Vector2(460f, 118f),
+                chosenSkillPanelSprite);
 
             GridLayoutGroup grid = skillsGridObj.AddComponent<GridLayoutGroup>();
-            grid.padding = new RectOffset(14, 14, 14, 14);
-            grid.cellSize = new Vector2(78f, 78f);
+            grid.padding = new RectOffset(28, 28, 22, 22);
+            grid.cellSize = new Vector2(72f, 72f);
             grid.spacing = new Vector2(10f, 10f);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 5;
@@ -448,11 +475,8 @@ namespace aTES.EditorTools
                 GameObject box = new GameObject($"SkillBox_{i:00}");
                 box.transform.SetParent(skillsGridObj.transform, false);
                 Image boxBg = box.AddComponent<Image>();
-                boxBg.color = new Color(0.14f, 0.14f, 0.18f, 1f);
-
-                Outline boxOutline = box.AddComponent<Outline>();
-                boxOutline.effectColor = new Color(0.5f, 0.5f, 0.58f, 1f);
-                boxOutline.effectDistance = new Vector2(2f, -2f);
+                boxBg.sprite = skillBoxSprite;
+                boxBg.color = Color.white;
 
                 Button btn = box.AddComponent<Button>();
                 btn.targetGraphic = boxBg;
@@ -462,8 +486,8 @@ namespace aTES.EditorTools
                 RectTransform logoRt = logo.AddComponent<RectTransform>();
                 logoRt.anchorMin = Vector2.zero;
                 logoRt.anchorMax = Vector2.one;
-                logoRt.offsetMin = new Vector2(4f, 4f);
-                logoRt.offsetMax = new Vector2(-4f, -4f);
+                logoRt.offsetMin = new Vector2(6f, 6f);
+                logoRt.offsetMax = new Vector2(-6f, -6f);
                 Image logoImg = logo.AddComponent<Image>();
                 logoImg.color = new Color(0.85f, 0.75f, 0.35f, 0.9f);
                 logoImg.preserveAspect = true;
@@ -474,7 +498,8 @@ namespace aTES.EditorTools
                 RectTransform cdRt = cooldown.AddComponent<RectTransform>();
                 cdRt.anchorMin = Vector2.zero;
                 cdRt.anchorMax = Vector2.one;
-                cdRt.offsetMin = cdRt.offsetMax = Vector2.zero;
+                cdRt.offsetMin = new Vector2(6f, 6f);
+                cdRt.offsetMax = new Vector2(-6f, -6f);
                 Image cdImg = cooldown.AddComponent<Image>();
                 cdImg.sprite = placeholderSprite;
                 cdImg.color = new Color(0f, 0f, 0f, 0.7f);
@@ -485,7 +510,7 @@ namespace aTES.EditorTools
                 cdImg.fillAmount = 0f;
                 cdImg.raycastTarget = false;
 
-                TextMeshProUGUI keyTmp = CreateTMP(box.transform, "Key", new Vector2(0f, 1f), new Vector2(4f, -2f), 18, Color.white, i.ToString());
+                TextMeshProUGUI keyTmp = CreateTMP(box.transform, "Key", new Vector2(0f, 1f), new Vector2(6f, -4f), 16, Color.white, i.ToString());
                 keyTmp.rectTransform.pivot = new Vector2(0f, 1f);
                 keyTmp.rectTransform.sizeDelta = new Vector2(30f, 24f);
                 keyTmp.alignment = TextAlignmentOptions.TopLeft;
@@ -500,10 +525,9 @@ namespace aTES.EditorTools
                 "SkillPopupPanel",
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(140f, -486f),
-                new Vector2(460f, 433f),
-                new Color(0.08f, 0.08f, 0.11f, 0.95f),
-                new Color(0.85f, 0.75f, 0.35f, 0.9f));
+                new Vector2(140f, -482f),
+                new Vector2(460f, 442f),
+                skillPopupPanelSprite);
 
             GameObject popupLogoObj = new GameObject("PopupLogo");
             popupLogoObj.transform.SetParent(popupPanel.transform, false);
@@ -511,40 +535,98 @@ namespace aTES.EditorTools
             popupLogoRt.anchorMin = new Vector2(0.5f, 1f);
             popupLogoRt.anchorMax = new Vector2(0.5f, 1f);
             popupLogoRt.pivot = new Vector2(0.5f, 1f);
-            popupLogoRt.anchoredPosition = new Vector2(0f, -20f);
+            popupLogoRt.anchoredPosition = new Vector2(0f, -14f);
             popupLogoRt.sizeDelta = new Vector2(140f, 140f);
             Image popupLogoImg = popupLogoObj.AddComponent<Image>();
             popupLogoImg.color = new Color(0.85f, 0.75f, 0.35f, 0.9f);
             popupLogoImg.preserveAspect = true;
 
-            TextMeshProUGUI popupTitle = CreateTMP(popupPanel.transform, "PopupTitle", new Vector2(0.5f, 1f), new Vector2(0f, -172f), 26, new Color(1f, 0.9f, 0.55f), "Skills");
+            TextMeshProUGUI popupTitle = CreateTMP(popupPanel.transform, "PopupTitle", new Vector2(0.5f, 1f), new Vector2(0f, -160f), 30, new Color(1f, 0.9f, 0.55f), "Skills");
             popupTitle.alignment = TextAlignmentOptions.Top;
             RectTransform titleRt = popupTitle.rectTransform;
             titleRt.pivot = new Vector2(0.5f, 1f);
-            titleRt.sizeDelta = new Vector2(410f, 36f);
+            titleRt.sizeDelta = new Vector2(400f, 36f);
 
-            TextMeshProUGUI popupDesc = CreateTMP(popupPanel.transform, "PopupDescription", new Vector2(0.5f, 1f), new Vector2(0f, -214f), 20, new Color(0.85f, 0.85f, 0.9f), "Hover a skill to see what it does.\nUse your skills with keys 1-5.");
+            GameObject scrollObj = new GameObject("DescScrollView");
+            scrollObj.transform.SetParent(popupPanel.transform, false);
+            RectTransform scrollRt = scrollObj.AddComponent<RectTransform>();
+            scrollRt.anchorMin = new Vector2(0.5f, 1f);
+            scrollRt.anchorMax = new Vector2(0.5f, 1f);
+            scrollRt.pivot = new Vector2(0.5f, 1f);
+            scrollRt.anchoredPosition = new Vector2(0f, -200f);
+            scrollRt.sizeDelta = new Vector2(400f, 226f);
+
+            Image hitImg = scrollObj.AddComponent<Image>();
+            hitImg.color = Color.clear;
+
+            scrollObj.AddComponent<RectMask2D>();
+            ScrollRect scrollRect = scrollObj.AddComponent<ScrollRect>();
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.scrollSensitivity = 30f;
+            scrollRect.viewport = scrollRt;
+
+            TextMeshProUGUI popupDesc = CreateTMP(scrollObj.transform, "PopupDescription", new Vector2(0.5f, 1f), Vector2.zero, 24, new Color(0.95f, 0.95f, 0.95f), "Hover a skill to see what it does.\n\nUse your skills with keys 1-5.");
             popupDesc.alignment = TextAlignmentOptions.Top;
             popupDesc.textWrappingMode = TextWrappingModes.Normal;
+            popupDesc.enableAutoSizing = false;
+            popupDesc.lineSpacing = 0f;
+            popupDesc.paragraphSpacing = 10f;
             RectTransform descRt = popupDesc.rectTransform;
+            descRt.anchorMin = new Vector2(0f, 1f);
+            descRt.anchorMax = new Vector2(1f, 1f);
             descRt.pivot = new Vector2(0.5f, 1f);
-            descRt.sizeDelta = new Vector2(410f, 200f);
+            descRt.offsetMin = new Vector2(10f, 0f);
+            descRt.offsetMax = new Vector2(-20f, 0f);
 
-            // 3. Gathered Ingredients Panel (Bottom-Left Corner - 5 little boxes)
+            ContentSizeFitter fitter = popupDesc.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            scrollRect.content = descRt;
+
+            GameObject sbarObj = new GameObject("Scrollbar");
+            sbarObj.transform.SetParent(scrollObj.transform, false);
+            RectTransform sbarRt = sbarObj.AddComponent<RectTransform>();
+            sbarRt.anchorMin = new Vector2(1f, 0f);
+            sbarRt.anchorMax = new Vector2(1f, 1f);
+            sbarRt.pivot = new Vector2(1f, 0.5f);
+            sbarRt.anchoredPosition = new Vector2(-2f, 0f);
+            sbarRt.sizeDelta = new Vector2(6f, -16f);
+
+            Image trackImg = sbarObj.AddComponent<Image>();
+            trackImg.color = new Color(0f, 0f, 0f, 0.25f);
+
+            GameObject handleObj = new GameObject("Handle");
+            handleObj.transform.SetParent(sbarObj.transform, false);
+            RectTransform handleRt = handleObj.AddComponent<RectTransform>();
+            handleRt.sizeDelta = Vector2.zero;
+            Image handleImg = handleObj.AddComponent<Image>();
+            handleImg.color = new Color(0.9f, 0.8f, 0.4f, 0.6f);
+
+            Scrollbar sbar = sbarObj.AddComponent<Scrollbar>();
+            sbar.direction = Scrollbar.Direction.BottomToTop;
+            sbar.targetGraphic = handleImg;
+            sbar.handleRect = handleRt;
+
+            scrollRect.verticalScrollbar = sbar;
+            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+
+            // 4. Gathered Ingredients Panel (Bottom-Left Corner - 5 little boxes using stuff3_4 & stuff3_2)
             GameObject ingredientsPanel = CreatePanel(
                 canvasObj.transform,
                 "IngredientsPanel",
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
-                new Vector2(140f, 45f),
-                new Vector2(460f, 96f),
-                new Color(0.05f, 0.05f, 0.07f, 0.9f),
-                new Color(0.45f, 0.35f, 0.2f, 1f));
+                new Vector2(140f, 35f),
+                new Vector2(460f, 114f),
+                gatheredPanelSprite);
 
             GridLayoutGroup ingGrid = ingredientsPanel.AddComponent<GridLayoutGroup>();
-            ingGrid.padding = new RectOffset(14, 14, 11, 11);
-            ingGrid.cellSize = new Vector2(74f, 74f);
-            ingGrid.spacing = new Vector2(15f, 0f);
+            ingGrid.padding = new RectOffset(28, 28, 20, 20);
+            ingGrid.cellSize = new Vector2(72f, 72f);
+            ingGrid.spacing = new Vector2(10f, 0f);
             ingGrid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             ingGrid.constraintCount = 5;
             ingGrid.childAlignment = TextAnchor.MiddleCenter;
@@ -554,37 +636,33 @@ namespace aTES.EditorTools
                 GameObject box = new GameObject($"IngredientBox_{i:00}");
                 box.transform.SetParent(ingredientsPanel.transform, false);
                 Image boxBg = box.AddComponent<Image>();
-                boxBg.color = new Color(0.12f, 0.11f, 0.1f, 1f);
-
-                Outline boxOutline = box.AddComponent<Outline>();
-                boxOutline.effectColor = new Color(0.65f, 0.5f, 0.25f, 1f);
-                boxOutline.effectDistance = new Vector2(2f, -2f);
+                boxBg.sprite = gatheredBoxSprite;
+                boxBg.color = Color.white;
 
                 GameObject icon = new GameObject("Icon");
                 icon.transform.SetParent(box.transform, false);
                 RectTransform iconRt = icon.AddComponent<RectTransform>();
                 iconRt.anchorMin = Vector2.zero;
                 iconRt.anchorMax = Vector2.one;
-                iconRt.offsetMin = new Vector2(8f, 8f);
-                iconRt.offsetMax = new Vector2(-8f, -8f);
+                iconRt.offsetMin = new Vector2(10f, 10f);
+                iconRt.offsetMax = new Vector2(-10f, -10f);
                 Image iconImg = icon.AddComponent<Image>();
                 iconImg.sprite = placeholderSprite;
                 iconImg.preserveAspect = true;
                 iconImg.enabled = false;
             }
 
-            // 5. Level UI (Top-Left corner of the Map) & Timer UI (Top-Right corner of the Map, aligned with False God Y-axis)
+            // 5. Level UI (Top-Left corner of the Map) & Timer UI (Top-Right corner of the Map)
             GameObject levelPanel = CreatePanel(
                 canvasObj.transform,
                 "LevelPanel",
                 new Vector2(1f, 1f),
                 new Vector2(0f, 1f),
-                new Vector2(-1025f, -40f),
-                new Vector2(220f, 62f),
-                new Color(0.08f, 0.08f, 0.1f, 0.95f),
-                new Color(0.75f, 0.2f, 0.25f, 1f));
+                new Vector2(-1120f, -6f),
+                new Vector2(210f, 56f),
+                panelSprite);
 
-            TextMeshProUGUI levelTmp = CreateTMP(levelPanel.transform, "LevelText", new Vector2(0.5f, 0.5f), Vector2.zero, 28, Color.white, "LEVEL 1");
+            TextMeshProUGUI levelTmp = CreateTMP(levelPanel.transform, "LevelText", new Vector2(0.5f, 0.5f), Vector2.zero, 22, Color.white, "LEVEL 1");
             levelTmp.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             levelTmp.alignment = TextAlignmentOptions.Center;
 
@@ -593,19 +671,21 @@ namespace aTES.EditorTools
                 "TimerPanel",
                 new Vector2(1f, 1f),
                 new Vector2(1f, 1f),
-                new Vector2(-210f, -40f),
-                new Vector2(260f, 62f),
-                new Color(0.08f, 0.08f, 0.1f, 0.95f),
-                new Color(0.75f, 0.2f, 0.25f, 1f));
+                new Vector2(-142f, -6f),
+                new Vector2(230f, 56f),
+                panelSprite);
 
-            CreateTMP(timerPanel.transform, "TimerText", new Vector2(0.5f, 1f), new Vector2(0f, -4f), 28, Color.white, "02:00");
-            CreateTMP(timerPanel.transform, "WarningText", new Vector2(0.5f, 1f), new Vector2(0f, -36f), 17, new Color(1f, 0.4f, 0.2f), "");
+            CreateTMP(timerPanel.transform, "TimerText", new Vector2(0.5f, 1f), new Vector2(0f, -6f), 22, Color.white, "02:00");
+            CreateTMP(timerPanel.transform, "WarningText", new Vector2(0.5f, 1f), new Vector2(0f, -32f), 13, new Color(1f, 0.4f, 0.2f), "");
 
             new GameObject("GameTimer").AddComponent<GameTimer>();
             SkillManager skillManager = new GameObject("SkillManager").AddComponent<SkillManager>();
             SerializedObject smSO = new SerializedObject(skillManager);
             AssignSprites(smSO.FindProperty("curseIcons"), "Assets/Sprites/CurseTier.png");
             AssignSprites(smSO.FindProperty("trickeryIcons"), "Assets/Sprites/Tier1.png");
+            AssignSprites(smSO.FindProperty("chaosIcons"), "Assets/Sprites/ChaosTier.png", 0, 4, 1, 2, 3);
+            smSO.FindProperty("cursorSprite").objectReferenceValue = cursorSprite;
+            smSO.FindProperty("buttonSprite").objectReferenceValue = buttonSprite;
             smSO.ApplyModifiedPropertiesWithoutUndo();
 
             // 6. Skill Choose Page (covers the map until 5 skills are chosen; columns are filled at runtime per skill tree)
@@ -616,36 +696,34 @@ namespace aTES.EditorTools
                 new Vector2(1f, 0.5f),
                 new Vector2(-140f, 0f),
                 new Vector2(1000f, 1000f),
-                new Color(0.04f, 0.04f, 0.06f, 0.98f),
-                new Color(0.75f, 0.2f, 0.25f, 1f));
+                choosePanelSprite);
 
-            CreateTMP(choosePanel.transform, "Title", new Vector2(0.5f, 1f), new Vector2(0f, -25f), 40, new Color(1f, 0.9f, 0.55f), "CHOOSE 5 SKILLS");
-            TextMeshProUGUI hint = CreateTMP(choosePanel.transform, "Hint", new Vector2(0.5f, 1f), new Vector2(0f, -75f), 20, new Color(0.75f, 0.75f, 0.8f), "Tier 1 is always open. Each next tier needs the one above it.");
-            hint.rectTransform.sizeDelta = new Vector2(900f, 30f);
+            CreateTMP(choosePanel.transform, "Title", new Vector2(0.5f, 1f), new Vector2(0f, -65f), 40, new Color(1f, 0.9f, 0.55f), "CHOOSE 5 SKILLS");
+            TextMeshProUGUI hint = CreateTMP(choosePanel.transform, "Hint", new Vector2(0.5f, 1f), new Vector2(0f, -115f), 20, new Color(0.9f, 0.9f, 0.95f), "Tier 1 is always open. Each next tier needs the one above it.");
+            hint.rectTransform.sizeDelta = new Vector2(820f, 30f);
 
             GameObject trees = new GameObject("Trees");
             trees.transform.SetParent(choosePanel.transform, false);
             RectTransform treesRt = trees.AddComponent<RectTransform>();
             treesRt.anchorMin = Vector2.zero;
             treesRt.anchorMax = Vector2.one;
-            treesRt.offsetMin = new Vector2(30f, 170f);
-            treesRt.offsetMax = new Vector2(-30f, -120f);
+            treesRt.offsetMin = new Vector2(90f, 220f);
+            treesRt.offsetMax = new Vector2(-90f, -155f);
             HorizontalLayoutGroup treesLayout = trees.AddComponent<HorizontalLayoutGroup>();
-            treesLayout.spacing = 24f;
+            treesLayout.spacing = 20f;
             treesLayout.childControlWidth = treesLayout.childControlHeight = true;
             treesLayout.childForceExpandWidth = treesLayout.childForceExpandHeight = true;
 
-            CreateTMP(choosePanel.transform, "CountText", new Vector2(0.5f, 0f), new Vector2(0f, 155f), 26, Color.white, "CHOSEN 0/5");
+            CreateTMP(choosePanel.transform, "CountText", new Vector2(0.5f, 0f), new Vector2(0f, 195f), 26, Color.white, "CHOSEN 0/5");
 
             GameObject startObj = CreatePanel(
                 choosePanel.transform,
                 "StartButton",
                 new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f),
-                new Vector2(0f, 25f),
-                new Vector2(300f, 64f),
-                new Color(0.55f, 0.15f, 0.2f, 1f),
-                new Color(1f, 0.9f, 0.55f, 1f));
+                new Vector2(0f, 75f),
+                new Vector2(310f, 80f),
+                buttonSprite);
             startObj.AddComponent<Button>().targetGraphic = startObj.GetComponent<Image>();
             TextMeshProUGUI startTmp = CreateTMP(startObj.transform, "Text", new Vector2(0.5f, 0.5f), Vector2.zero, 30, Color.white, "START");
             startTmp.rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -653,7 +731,42 @@ namespace aTES.EditorTools
 
             choosePanel.AddComponent<SkillChooseScreen>();
 
-            // 7. Level Won & Level Failed UI Panels (ready for custom UI artwork sprites)
+            // 7. Pause Game Menu Panel (uses stuff3_1 sprite)
+            GameObject pausePanel = CreatePanel(
+                canvasObj.transform,
+                "PausePanel",
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(480f, 680f),
+                pausePanelSprite);
+
+            CreateTMP(pausePanel.transform, "Title", new Vector2(0.5f, 1f), new Vector2(0f, -80f), 42, new Color(1f, 0.9f, 0.55f), "PAUSED");
+
+            Action<string, string, float> makePauseBtn = (bName, bText, yPos) =>
+            {
+                GameObject bObj = CreatePanel(
+                    pausePanel.transform,
+                    bName,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0f, yPos),
+                    new Vector2(300f, 75f),
+                    buttonSprite);
+                bObj.AddComponent<Button>().targetGraphic = bObj.GetComponent<Image>();
+                TextMeshProUGUI bTmp = CreateTMP(bObj.transform, "Text", new Vector2(0.5f, 0.5f), Vector2.zero, 28, Color.white, bText);
+                bTmp.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                bTmp.raycastTarget = false;
+            };
+
+            makePauseBtn("ResumeButton", "RESUME", 50f);
+            makePauseBtn("RestartButton", "RESTART", -50f);
+            makePauseBtn("QuitButton", "QUIT", -150f);
+
+            pausePanel.SetActive(false);
+            canvasObj.AddComponent<PauseMenu>();
+
+            // 8. Level Won & Level Failed UI Panels
             CreateResultModal(
                 canvasObj.transform,
                 "LevelWonPanel",
@@ -661,6 +774,8 @@ namespace aTES.EditorTools
                 "The chef ran out of time!",
                 "NEXT LEVEL",
                 new Color(0.25f, 0.85f, 0.45f, 1f),
+                panelSprite,
+                buttonSprite,
                 placeholderSprite);
 
             CreateResultModal(
@@ -670,10 +785,12 @@ namespace aTES.EditorTools
                 "The chef gathered all the ingredients!",
                 "TRY AGAIN",
                 new Color(0.9f, 0.25f, 0.25f, 1f),
+                panelSprite,
+                buttonSprite,
                 placeholderSprite);
         }
 
-        private static GameObject CreateResultModal(Transform parent, string name, string title, string subtitle, string buttonLabel, Color accentColor, Sprite placeholderSprite)
+        private static GameObject CreateResultModal(Transform parent, string name, string title, string subtitle, string buttonLabel, Color accentColor, Sprite panelSprite, Sprite buttonSprite, Sprite placeholderSprite)
         {
             GameObject modal = CreatePanel(
                 parent,
@@ -682,8 +799,7 @@ namespace aTES.EditorTools
                 new Vector2(1f, 0.5f),
                 new Vector2(-140f, 0f),
                 new Vector2(1000f, 1000f),
-                new Color(0.04f, 0.04f, 0.06f, 0.96f),
-                accentColor);
+                panelSprite);
 
             GameObject artworkObj = new GameObject("Artwork");
             artworkObj.transform.SetParent(modal.transform, false);
@@ -691,29 +807,28 @@ namespace aTES.EditorTools
             artRt.anchorMin = new Vector2(0.5f, 0.5f);
             artRt.anchorMax = new Vector2(0.5f, 0.5f);
             artRt.pivot = new Vector2(0.5f, 0.5f);
-            artRt.anchoredPosition = new Vector2(0f, 90f);
-            artRt.sizeDelta = new Vector2(520f, 520f);
+            artRt.anchoredPosition = new Vector2(0f, 75f);
+            artRt.sizeDelta = new Vector2(440f, 440f);
             Image artImg = artworkObj.AddComponent<Image>();
             artImg.sprite = placeholderSprite;
             artImg.color = Color.Lerp(accentColor, Color.white, 0.25f);
             artImg.preserveAspect = true;
 
-            CreateTMP(modal.transform, "Title", new Vector2(0.5f, 1f), new Vector2(0f, -50f), 52, accentColor, title);
-            TextMeshProUGUI subTmp = CreateTMP(modal.transform, "Subtitle", new Vector2(0.5f, 0f), new Vector2(0f, 200f), 26, new Color(0.85f, 0.85f, 0.9f), subtitle);
-            subTmp.rectTransform.sizeDelta = new Vector2(800f, 45f);
+            CreateTMP(modal.transform, "Title", new Vector2(0.5f, 1f), new Vector2(0f, -85f), 50, accentColor, title);
+            TextMeshProUGUI subTmp = CreateTMP(modal.transform, "Subtitle", new Vector2(0.5f, 0f), new Vector2(0f, 225f), 26, new Color(0.95f, 0.95f, 0.95f), subtitle);
+            subTmp.rectTransform.sizeDelta = new Vector2(760f, 45f);
 
             GameObject actionBtn = CreatePanel(
                 modal.transform,
                 "ActionButton",
                 new Vector2(0.5f, 0f),
                 new Vector2(0.5f, 0f),
-                new Vector2(0f, 55f),
-                new Vector2(340f, 76f),
-                new Color(accentColor.r * 0.45f, accentColor.g * 0.45f, accentColor.b * 0.45f, 1f),
-                accentColor);
+                new Vector2(0f, 85f),
+                new Vector2(340f, 86f),
+                buttonSprite);
             actionBtn.AddComponent<Button>().targetGraphic = actionBtn.GetComponent<Image>();
 
-            TextMeshProUGUI btnTmp = CreateTMP(actionBtn.transform, "Text", new Vector2(0.5f, 0.5f), Vector2.zero, 32, Color.white, buttonLabel);
+            TextMeshProUGUI btnTmp = CreateTMP(actionBtn.transform, "Text", new Vector2(0.5f, 0.5f), Vector2.zero, 30, Color.white, buttonLabel);
             btnTmp.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             btnTmp.raycastTarget = false;
 
@@ -721,7 +836,7 @@ namespace aTES.EditorTools
             return modal;
         }
 
-        private static GameObject CreatePanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 pos, Vector2 size, Color bgColor, Color borderColor)
+        private static GameObject CreatePanel(Transform parent, string name, Vector2 anchor, Vector2 pivot, Vector2 pos, Vector2 size, Sprite sprite)
         {
             GameObject panel = new GameObject(name);
             panel.transform.SetParent(parent, false);
@@ -733,11 +848,8 @@ namespace aTES.EditorTools
             rt.sizeDelta = size;
 
             Image img = panel.AddComponent<Image>();
-            img.color = bgColor;
-
-            Outline outline = panel.AddComponent<Outline>();
-            outline.effectColor = borderColor;
-            outline.effectDistance = new Vector2(2f, -2f);
+            img.sprite = sprite;
+            img.color = Color.white;
             return panel;
         }
 
@@ -753,6 +865,8 @@ namespace aTES.EditorTools
             rt.sizeDelta = new Vector2(400f, 50f);
 
             TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
+            TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/MesseDuesseldorf-O1d3 SDF.asset");
+            if (font != null) tmp.font = font;
             tmp.fontSize = fontSize;
             tmp.alignment = TextAlignmentOptions.Center;
             tmp.color = color;
@@ -760,12 +874,15 @@ namespace aTES.EditorTools
             return tmp;
         }
 
-        private static void AssignSprites(SerializedProperty arrayProp, string assetPath)
+        private static void AssignSprites(SerializedProperty arrayProp, string assetPath, params int[] order)
         {
             Sprite[] sprites = AssetDatabase.LoadAllAssetsAtPath(assetPath)
                 .OfType<Sprite>()
                 .OrderBy(s => s.rect.x)
                 .ToArray();
+            if (order != null && order.Length == sprites.Length)
+                sprites = order.Select(idx => sprites[idx]).ToArray();
+
             arrayProp.ClearArray();
             for (int i = 0; i < sprites.Length; i++)
             {
