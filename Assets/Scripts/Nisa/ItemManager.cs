@@ -16,10 +16,12 @@ public class ItemManager : MonoBehaviour
 {
     public static ItemManager Instance { get; private set; }
 
+    [SerializeField] private int itemsPerLevel = 5;
     [SerializeField] private List<ItemSpawnEntry> spawnEntries = new();
 
     private readonly Dictionary<Item, Vector3> activeItems = new();
     private readonly List<Image> ingredientSlots = new();
+    private readonly List<ItemData> gatheredItems = new();
     private int gatheredCount;
     private LevelManager levelManager;
     private Transform playerStartPoint;
@@ -83,7 +85,9 @@ public class ItemManager : MonoBehaviour
 
     public void RecordGatheredIngredient(ItemData data)
     {
-        if (data == null || gatheredCount >= ingredientSlots.Count) return;
+        if (data == null) return;
+        gatheredItems.Add(data);
+        if (gatheredCount >= ingredientSlots.Count) return;
 
         Image slot = ingredientSlots[gatheredCount++];
         Sprite icon = data.gatheredSprite != null ? data.gatheredSprite : data.itemSprite;
@@ -92,9 +96,28 @@ public class ItemManager : MonoBehaviour
         slot.enabled = true;
     }
 
+    /// <summary>Steals one already-gathered ingredient from the UI box and spawns it back on the map at <paramref name="cell"/>.</summary>
+    public bool RespawnGatheredIngredient(Vector3Int cell)
+    {
+        if (gatheredItems.Count == 0) return false;
+
+        ItemData data = gatheredItems[^1];
+        gatheredItems.RemoveAt(gatheredItems.Count - 1);
+
+        if (gatheredCount > 0)
+        {
+            gatheredCount--;
+            if (gatheredCount < ingredientSlots.Count && ingredientSlots[gatheredCount] != null)
+                ingredientSlots[gatheredCount].enabled = false;
+        }
+
+        return SpawnItem(data, cell) != null;
+    }
+
     private void ResetIngredientSlots()
     {
         gatheredCount = 0;
+        gatheredItems.Clear();
         foreach (Image slot in ingredientSlots)
         {
             if (slot != null) slot.enabled = false;
@@ -113,13 +136,23 @@ public class ItemManager : MonoBehaviour
             (cells[i], cells[j]) = (cells[j], cells[i]);
         }
 
-        int index = 0;
+        List<ItemData> pool = new();
         foreach (ItemSpawnEntry entry in spawnEntries)
         {
-            for (int i = 0; i < entry.amount && index < cells.Count; i++)
-            {
-                if (SpawnItem(entry.itemData, cells[index]) != null) index++;
-            }
+            if (entry.itemData == null) continue;
+            for (int i = 0; i < entry.amount; i++) pool.Add(entry.itemData);
+        }
+
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+
+        int count = Mathf.Min(itemsPerLevel, Mathf.Min(pool.Count, cells.Count));
+        for (int i = 0; i < count; i++)
+        {
+            SpawnItem(pool[i], cells[i]);
         }
     }
 
@@ -139,7 +172,10 @@ public class ItemManager : MonoBehaviour
 
         item.Initialize(data);
         if (data.itemSprite != null && obj.TryGetComponent(out SpriteRenderer sr))
+        {
             sr.sprite = data.itemSprite;
+            sr.color = Color.white;
+        }
 
         RegisterItem(item, pos);
         return item;
@@ -203,11 +239,15 @@ public class ItemManager : MonoBehaviour
             OnItemsChanged?.Invoke();
     }
 
-    public bool TryMoveItem(Item item, Vector3Int targetCell)
+    public bool CanPlaceItemAt(Item item, Vector3Int targetCell)
     {
         PathCreator map = PathCreator.Active;
-        if (item == null || item.IsCollected || map == null || playerStartPoint == null || !activeItems.ContainsKey(item)
-            || !FloodFill(map.WorldToCell(playerStartPoint.position)).ContainsKey(targetCell))
+        if (item == null || item.IsCollected || map == null || playerStartPoint == null || !activeItems.ContainsKey(item))
+            return false;
+
+        Vector3Int startCell = map.WorldToCell(playerStartPoint.position);
+        Vector3Int deliveryCell = deliveryPoint != null ? map.WorldToCell(deliveryPoint.position) : startCell;
+        if (targetCell == startCell || targetCell == deliveryCell || !FloodFill(startCell).ContainsKey(targetCell))
             return false;
 
         foreach (KeyValuePair<Item, Vector3> kv in activeItems)
@@ -215,8 +255,15 @@ public class ItemManager : MonoBehaviour
             if (kv.Key != item && map.WorldToCell(kv.Value) == targetCell)
                 return false;
         }
+        return true;
+    }
 
-        Vector3 newPos = map.CellToWorldCenter(targetCell);
+    public bool TryMoveItem(Item item, Vector3Int targetCell)
+    {
+        if (!CanPlaceItemAt(item, targetCell))
+            return false;
+
+        Vector3 newPos = PathCreator.Active.CellToWorldCenter(targetCell);
         item.transform.position = newPos;
         activeItems[item] = newPos;
         OnItemPositionChanged?.Invoke(item, newPos);

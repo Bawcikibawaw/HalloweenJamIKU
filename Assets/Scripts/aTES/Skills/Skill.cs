@@ -20,7 +20,7 @@ namespace aTES
         public Sprite Icon { get; }
         public Color Color => TreeColor(Tree);
 
-        private float readyTime;
+        protected float readyTime;
         public float CooldownLeft => Mathf.Max(0f, readyTime - Time.time);
         public float CooldownPercent => Cooldown > 0f ? CooldownLeft / Cooldown : 0f;
 
@@ -35,12 +35,14 @@ namespace aTES
         }
 
         /// <summary>Uses the skill if it is off cooldown. Cooldown only starts if the skill actually did something.</summary>
-        public bool TryUse(SkillManager m)
+        public virtual bool TryUse(SkillManager m)
         {
             if (CooldownLeft > 0f || !Activate(m)) return false;
-            readyTime = Time.time + Cooldown;
+            StartCooldown();
             return true;
         }
+
+        public void StartCooldown() => readyTime = Time.time + Cooldown;
 
         public void ResetCooldown() => readyTime = 0f;
 

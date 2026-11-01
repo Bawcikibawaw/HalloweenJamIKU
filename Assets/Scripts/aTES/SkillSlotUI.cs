@@ -19,7 +19,6 @@ namespace aTES
 
         private Image logo;
         private Image cooldown;
-        private Sprite defaultSprite;
         private Skill skill;
 
         private int Slot => transform.GetSiblingIndex();
@@ -28,7 +27,6 @@ namespace aTES
         {
             logo = transform.Find("Logo")?.GetComponent<Image>();
             cooldown = transform.Find("Cooldown")?.GetComponent<Image>();
-            defaultSprite = logo != null ? logo.sprite : null;
 
             TMP_Text key = transform.Find("Key")?.GetComponent<TMP_Text>();
             if (key != null) key.text = (Slot + 1).ToString();
@@ -58,8 +56,8 @@ namespace aTES
             if (logo == null) return;
             logo.enabled = skill != null;
             if (skill == null) return;
-            logo.sprite = skill.Icon != null ? skill.Icon : defaultSprite;
-            logo.color = skill.Icon != null ? Color.white : skill.Color;
+            logo.sprite = skill.Icon;
+            logo.color = skill.Icon != null ? Color.white : Color.Lerp(skill.Color, Color.white, 0.5f);
         }
 
         public void OnPointerEnter(PointerEventData eventData) => ShowPopup(skill);
@@ -88,8 +86,8 @@ namespace aTES
 
             if (popupLogo != null)
             {
-                if (s.Icon != null) popupLogo.sprite = s.Icon;
-                popupLogo.color = s.Icon != null ? Color.white : s.Color;
+                popupLogo.sprite = s.Icon;
+                popupLogo.color = s.Icon != null ? Color.white : Color.Lerp(s.Color, Color.white, 0.5f);
             }
             if (popupTitle != null) popupTitle.text = s.Name;
             if (popupDescription != null)
